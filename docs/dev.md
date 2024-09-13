@@ -10,6 +10,9 @@ proto install rust
 # install cross
 cargo install cross
 
+# apt update -y && apt upgrade -y
+sudo apt install -y libssl-dev pkg-config
+
 # vscode rust-analyzer , dependi
 ```
 
@@ -18,32 +21,37 @@ cargo install cross
 ```bash
 proto init
 # Dependencies
-cargo add clap --features derive # clap = { version = "4.0", features = ["derive"] }
+# cargo add clap --features derive # clap = { version = "4.0", features = ["derive"] }
 
-cargo add serde --features derive # 序列化/反序列化
-cargo add serde_json # json
-cargo add serde_yaml # yaml
-cargo add quick-xml --features "serialize" # xml
-cargo add dirs # dirs::home_dir
+# cargo add serde --features derive # 序列化/反序列化
+# cargo add serde_json # json
+# cargo add serde_yaml # yaml
+# cargo add quick-xml --features "serialize" # xml
+# cargo add dirs # dirs::home_dir
+# cargo add tokio --features "full" # async/await
+# cargo add reqwest --features "json,default-tls" # reqwest::Client;
+# cargo add anyhow # 错误处理 thiserror/anyhow
 cargo add once_cell # once_cell::sync::Lazy;
-cargo add reqwest --features "json,default-tls" # reqwest::Client;
-cargo add tokio --features "full" # async/await
-cargo add base64
-cargo add anyhow # 错误处理 thiserror/anyhow
+
+# cargo add chrono # 时间
+# cargo add regex # 正则
+# cargo add url # url解析
+# cargo add base64
 cargo add dialoguer --features "fuzzy-select" # 单选/多选
   cargo add console # 控制台交互
   cargo add indicatif # 进度条/spinner
-cargo add colored # 颜色
-cargo add crossterm # 终端交互 clear/position
-cargo add regex # 正则
-cargo add url # url解析
-cargo add libc # c库 #flush_stdin
-cargo add winapi --features "wincon" # windows api #flush_stdin
-cargo add chrono # 时间
+# cargo add colored # 颜色
+# cargo add crossterm # 终端交互 clear/position
+# cargo add libc # c库 #flush_stdin
+# cargo add winapi --features "wincon" # windows api #flush_stdin
 
 cargo add spinners # spinner动画; cargo remove spinners
 
-# cargo bloat --release --crates # 使用 cargo-bloat 工具分析二进制文件的大小 # cargo install cargo-bloat
+
+# 静态分析, 检查潜在错误/性能问题/代码风格
+# cargo clippy # --fix --allow-dirty
+# 分析二进制文件的大小
+# cargo bloat --release --crates # cargo install cargo-bloat
 ```
 
 ### Run
@@ -70,6 +78,7 @@ cross build --target aarch64-apple-darwin --release # build for M1/M2 Mac
 
 ```bash
 cargo test
+cargo test --test test_git_branches -- --nocapture
 cargo test --test test_version_compare -- --nocapture
 ```
 
