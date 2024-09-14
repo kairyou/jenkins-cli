@@ -31,21 +31,21 @@ proto init
 # cargo add tokio --features "full" # async/await
 # cargo add reqwest --features "json,default-tls" # reqwest::Client;
 # cargo add anyhow # 错误处理 thiserror/anyhow
-cargo add once_cell # once_cell::sync::Lazy;
+# cargo add once_cell # once_cell::sync::Lazy;
 
 # cargo add chrono # 时间
 # cargo add regex # 正则
 # cargo add url # url解析
 # cargo add base64
-cargo add dialoguer --features "fuzzy-select" # 单选/多选
-  cargo add console # 控制台交互
-  cargo add indicatif # 进度条/spinner
+# cargo add dialoguer --features "fuzzy-select" # 单选/多选
+# cargo add console # 控制台交互 (dialoguer ColorfulTheme)
+# cargo add indicatif # 进度条/spinner
 # cargo add colored # 颜色
 # cargo add crossterm # 终端交互 clear/position
 # cargo add libc # c库 #flush_stdin
 # cargo add winapi --features "wincon" # windows api #flush_stdin
 
-cargo add spinners # spinner动画; cargo remove spinners
+## cargo add spinners # spinner动画; cargo remove spinners
 
 
 # 静态分析, 检查潜在错误/性能问题/代码风格
@@ -80,6 +80,7 @@ cross build --target aarch64-apple-darwin --release # build for M1/M2 Mac
 cargo test
 cargo test --test test_git_branches -- --nocapture
 cargo test --test test_version_compare -- --nocapture
+cargo test --test test_jenkins_job_parameter -- --nocapture
 ```
 
 #### FAQs
