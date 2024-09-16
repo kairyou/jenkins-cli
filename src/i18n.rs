@@ -78,7 +78,7 @@ impl I18n {
     pub fn t(key: &str, args: Option<&[(&str, FluentValue)]>, locale: Option<&str>) -> String {
         let locale = locale
             .map(|l| l.to_string())
-            .unwrap_or_else(|| Self::locale());
+            .unwrap_or_else(Self::locale);
         let bundle = get_bundle(&locale);
 
         let mut fluent_args = FluentArgs::new();

@@ -246,7 +246,7 @@ async fn menu() {
             println!(" {}: {}", key.yellow(), value);
         }
         dialoguer::Confirm::with_theme(&ColorfulTheme::default())
-            .with_prompt(&t!("use-last-build-params"))
+            .with_prompt(t!("use-last-build-params"))
             .default(true)
             .interact()
             .unwrap_or_else(|_e| {
