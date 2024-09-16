@@ -45,14 +45,14 @@ Create a file named `.jenkins.yaml` in your home directory with the following co
 # $HOME/.jenkins.yaml
 - name: "SIT"
   url: "https://jenkins-sit.your-company.com"
-  username: "your-username"
-  api_token: "your-api-token"
+  user: "your-username"
+  token: "your-api-token"
   includes: []
   excludes: []
 # - name: "PROD"
 #   url: "https://jenkins-prod.your-company.com"
-#   username: "your-username"
-#   api_token: "your-api-token"
+#   user: "your-username"
+#   token: "your-api-token"
 #   includes: ["frontend", "backend"]
 #   excludes: ["test"]
 ```
@@ -61,8 +61,8 @@ Create a file named `.jenkins.yaml` in your home directory with the following co
 
 - `name`: Environment name (e.g., "SIT", "UAT"，"PROD")
 - `url`: Jenkins server URL
-- `username`: Your Jenkins user ID
-- `api_token`: Your Jenkins API token
+- `user`: Your Jenkins user ID
+- `token`: Your Jenkins API token
 - `includes`: List of strings or regex patterns to include projects (optional)
 - `excludes`: List of strings or regex patterns to exclude projects (optional)
 
@@ -99,7 +99,7 @@ Note: Keep your API token secure. Do not share it or commit it to version contro
 - [x] Support password parameter type
 - [x] Auto-detect current directory's git branch
 - [x] Remember last selected project and build parameters
-- [ ] i18n support (fluent)
+- [x] i18n support (fluent)
 - [ ] Auto-upgrade feature (self_update)
 
 ## License

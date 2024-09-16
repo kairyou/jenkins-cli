@@ -36,11 +36,13 @@ impl Spinner {
         self.spinner.suspend(f)
     }
     // set message
+    #[allow(dead_code)]
     pub fn set_message(&self, msg: String) {
         self.spinner.set_message(msg);
     }
 
     // set spinner speed
+    #[allow(dead_code)]
     pub fn enable_steady_tick(&self, ms: u64) {
         self.spinner.enable_steady_tick(Duration::from_millis(ms));
     }

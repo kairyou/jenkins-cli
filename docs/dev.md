@@ -45,14 +45,22 @@ proto init
 # cargo add libc # c库 #flush_stdin
 # cargo add winapi --features "wincon" # windows api #flush_stdin
 
-## cargo add spinners # spinner动画; cargo remove spinners
-
+# cargo add fluent fluent-langneg # i18n
+# cargo add sys-locale # get system locale
+# cargo add rust-embed # embed files to binary
 
 # 静态分析, 检查潜在错误/性能问题/代码风格
 # cargo clippy # --fix --allow-dirty
 # 分析二进制文件的大小
 # cargo bloat --release --crates # cargo install cargo-bloat
 ```
+
+<!-- 
+cargo add spinners # spinner
+# cargo add rust-i18n # i18n
+  # println!("Current language: {}", rust_i18n::locale().to_string());
+  # println!("Available languages: {:?}", rust_i18n::available_locales!());
+-->
 
 ### Run
 

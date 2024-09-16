@@ -59,6 +59,7 @@ pub fn current_timestamp() -> i64 {
 }
 
 /// check if ctrl+c is pressed
+#[allow(dead_code)]
 pub fn check_ctrl_c(ctrl_c_pressed: &Arc<AtomicBool>) -> Result<(), anyhow::Error> {
   if ctrl_c_pressed.load(Ordering::SeqCst) {
       Err(anyhow!("Ctrl+C pressed"))

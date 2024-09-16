@@ -45,14 +45,14 @@ jenkins
 # $HOME/.jenkins.yaml
 - name: "SIT"
   url: "https://jenkins-sit.your-company.com"
-  username: "your-username"
-  api_token: "your-api-token"
+  user: "your-username"
+  token: "your-api-token"
   includes: []
   excludes: []
 # - name: "PROD"
 #   url: "https://jenkins-prod.your-company.com"
-#   username: "your-username"
-#   api_token: "your-api-token"
+#   user: "your-username"
+#   token: "your-api-token"
 #   includes: ["frontend", "backend"]
 #   excludes: ["test"]
 ```
@@ -61,8 +61,8 @@ jenkins
 
 - `name`: 环境名称 (e.g., "SIT", "UAT"，"PROD")
 - `url`: Jenkins 服务器地址
-- `username`: 你的 Jenkins User ID
-- `api_token`: 你的 Jenkins API token
+- `user`: 你的 Jenkins User ID
+- `token`: 你的 Jenkins API token
 - `includes`: 包含项目的字符串或正则表达式列表 (可选)
 - `excludes`: 排除项目的字符串或正则表达式列表 (可选)
 
@@ -99,7 +99,7 @@ Jenkins User ID 就是登录 Jenkins 网页界面的用户名。
 - [x] 支持 password 类型参数
 - [x] 自动读取当前目录 git 分支
 - [x] 记录上次选择的项目/构建参数
-- [ ] i18n 支持 (fluent)
+- [x] i18n 支持 (fluent)
 - [ ] 自动升级功能 (self_update)
 
 ## 许可证
