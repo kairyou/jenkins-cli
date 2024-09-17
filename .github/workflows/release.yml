@@ -16,7 +16,6 @@ jobs:
           - x86_64-pc-windows-gnu # Windows (MinGW)
           - aarch64-unknown-linux-gnu # ARM64 Linux (GNU)
           - aarch64-unknown-linux-musl # ARM64 Linux (musl)
-          # - wasm32-unknown-unknown # WebAssembly
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -27,7 +26,12 @@ jobs:
       - name: Build
         run: cross build --release --target=${{ matrix.target }}
       - name: Package
-        run: tar -czf jenkins-${{ matrix.target }}.tar.gz -C target/${{ matrix.target }}/release jenkins
+        run: |
+          if [[ "${{ matrix.target }}" == *"-windows-"* ]]; then
+            tar -czf jenkins-${{ matrix.target }}.tar.gz -C target/${{ matrix.target }}/release jenkins.exe
+          else
+            tar -czf jenkins-${{ matrix.target }}.tar.gz -C target/${{ matrix.target }}/release jenkins
+          fi
 
   release-windows:
     runs-on: windows-latest
@@ -43,7 +47,7 @@ jobs:
       - name: Build
         run: cargo build --release --target=${{ matrix.target }}
       - name: Package
-        run: tar -czf jenkins-${{ matrix.target }}.tar.gz -C target/${{ matrix.target }}/release jenkins
+        run: tar -czf jenkins-${{ matrix.target }}.tar.gz -C target/${{ matrix.target }}/release jenkins.exe
 
   release-apple:
     runs-on: macos-latest
@@ -61,6 +65,20 @@ jobs:
         run: cargo build --release --target=${{ matrix.target }}
       - name: Package
         run: tar -czf jenkins-${{ matrix.target }}.tar.gz -C target/${{ matrix.target }}/release jenkins
+
+  # release-wasm:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: dtolnay/rust-toolchain@stable
+  #       with:
+  #         targets: wasm32-unknown-unknown
+  #     - name: install wasm-pack
+  #       run: cargo install wasm-pack
+  #     - name: Build
+  #       run: wasm-pack build --target web
+  #     - name: Package
+  #       run: tar -czf jenkins-wasm32-unknown-unknown.tar.gz -C target/wasm32-unknown-unknown/release jenkins
 
   create-release:
     needs: [release-corss, release-windows, release-apple]
