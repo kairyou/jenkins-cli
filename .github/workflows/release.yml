@@ -32,6 +32,11 @@ jobs:
           else
             tar -czf jenkins-${{ matrix.target }}.tar.gz -C target/${{ matrix.target }}/release jenkins
           fi
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: jenkins-${{ matrix.target }}
+          path: jenkins-${{ matrix.target }}.*
 
   release-windows:
     runs-on: windows-latest
@@ -48,6 +53,11 @@ jobs:
         run: cargo build --release --target=${{ matrix.target }}
       - name: Package
         run: tar -czf jenkins-${{ matrix.target }}.tar.gz -C target/${{ matrix.target }}/release jenkins.exe
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: jenkins-${{ matrix.target }}
+          path: jenkins-${{ matrix.target }}.*
 
   release-apple:
     runs-on: macos-latest
@@ -65,6 +75,11 @@ jobs:
         run: cargo build --release --target=${{ matrix.target }}
       - name: Package
         run: tar -czf jenkins-${{ matrix.target }}.tar.gz -C target/${{ matrix.target }}/release jenkins
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: jenkins-${{ matrix.target }}
+          path: jenkins-${{ matrix.target }}.*
 
   # release-wasm:
   #   runs-on: ubuntu-latest
@@ -84,6 +99,14 @@ jobs:
     needs: [release-corss, release-windows, release-apple]
     runs-on: ubuntu-latest
     steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: jenkins-*
+          merge-multiple: true
+      - name: List artifacts
+        run: find artifacts -type f
       - name: Create Release
         uses: softprops/action-gh-release@v1
         env:
