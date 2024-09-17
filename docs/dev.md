@@ -55,6 +55,9 @@ proto init
 # cargo clippy # --fix --allow-dirty
 # 分析二进制文件的大小
 # cargo bloat --release --crates # cargo install cargo-bloat
+
+# cargo install cargo-release
+cargo release patch --execute --no-publish # auto update version and push tag to remote
 ```
 
 <!-- 
