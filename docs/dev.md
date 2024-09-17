@@ -29,7 +29,7 @@ proto init
 # cargo add quick-xml --features "serialize" # xml
 # cargo add dirs # dirs::home_dir
 # cargo add tokio --features "full" # async/await
-# cargo add reqwest --features "json,default-tls" # reqwest::Client;
+# cargo add reqwest --no-default-features --features "json,rustls-tls" # reqwest disable openssl-sys
 # cargo add anyhow # 错误处理 thiserror/anyhow
 # cargo add once_cell # once_cell::sync::Lazy;
 
@@ -58,6 +58,9 @@ proto init
 
 # cargo install cargo-release
 cargo release patch --execute --no-publish # auto update version and push tag to remote
+# Retrigger release
+# git tag -d v0.1.1 && git push origin :refs/tags/v0.1.1 # Delete tag
+# git tag v0.1.1 && git push origin v0.1.1 # Push tag
 ```
 
 <!-- 
