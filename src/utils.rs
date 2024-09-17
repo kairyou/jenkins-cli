@@ -71,7 +71,10 @@ pub fn check_ctrl_c(ctrl_c_pressed: &Arc<AtomicBool>) -> Result<(), anyhow::Erro
 /// delay `ms` milliseconds
 /// # Examples
 /// ```rust
-/// delay(5 * 1000).await; // = tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+/// use jenkins::utils::delay;
+/// async fn test_delay() {
+///     delay(5 * 1000).await; // = tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+/// }
 /// ```
 pub async fn delay(ms: u64) {
   // tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;

@@ -35,14 +35,6 @@ impl JenkinsClient {
     ///
     /// # Returns
     /// A `Result` containing the headers or an `anyhow::Error` if the headers cannot be built.
-    ///
-    /// # Example
-    /// ```rust
-    /// let mut extra_headers = HashMap::new();
-    /// extra_headers.insert("Custom-Header".to_string(), "CustomValue".to_string());
-    /// let headers = self.build_headers(Some(extra_headers))?;
-    /// let headers = self.build_headers(None)?;
-    /// ```
     fn build_headers(
         &self,
         extra_headers: Option<HashMap<String, String>>,

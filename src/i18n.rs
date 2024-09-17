@@ -8,8 +8,8 @@ use std::sync::{Arc, RwLock};
 
 /// # Examples
 /// ```rust
-/// mod i18n;
-/// use crate::i18n::I18n;
+/// use jenkins::i18n::I18n;
+/// use jenkins::t;
 ///
 /// I18n::set_locale("zh-CN"); // Optional, set locale(default is system locale)
 /// println!("current locale: {}", I18n::locale());

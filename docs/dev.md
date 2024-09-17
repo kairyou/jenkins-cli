@@ -49,6 +49,8 @@ proto init
 # cargo add sys-locale # get system locale
 # cargo add rust-embed # embed files to binary
 
+# test
+# cargo test -v --no-fail-fast
 # 静态分析, 检查潜在错误/性能问题/代码风格
 # cargo clippy # --fix --allow-dirty
 # 分析二进制文件的大小
