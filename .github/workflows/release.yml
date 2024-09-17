@@ -6,20 +6,17 @@ on:
       - "v*"
 
 jobs:
-  release:
+  release-corss:
+    runs-on: ubuntu-20.04
     strategy:
       matrix:
         target:
-          - x86_64-apple-darwin # Intel Mac
-          - aarch64-apple-darwin # M1/M2 Mac
-          - x86_64-pc-windows-msvc # Windows (MSVC)
-          - x86_64-pc-windows-gnu # Windows (MinGW)
           - x86_64-unknown-linux-gnu # x86_64 Linux (GNU)
           - x86_64-unknown-linux-musl # x86_64 Linux (musl)
+          - x86_64-pc-windows-gnu # Windows (MinGW)
           - aarch64-unknown-linux-gnu # ARM64 Linux (GNU)
           - aarch64-unknown-linux-musl # ARM64 Linux (musl)
           # - wasm32-unknown-unknown # WebAssembly
-    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -31,9 +28,49 @@ jobs:
         run: cross build --release --target=${{ matrix.target }}
       - name: Package
         run: tar -czf jenkins-${{ matrix.target }}.tar.gz -C target/${{ matrix.target }}/release jenkins
-      - name: Release
+
+  release-windows:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        target:
+          - x86_64-pc-windows-msvc # Windows (MSVC)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Build
+        run: cargo build --release --target=${{ matrix.target }}
+      - name: Package
+        run: tar -czf jenkins-${{ matrix.target }}.tar.gz -C target/${{ matrix.target }}/release jenkins
+
+  release-apple:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        target:
+          - x86_64-apple-darwin # Intel Mac
+          - aarch64-apple-darwin # M1/M2 Mac
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Build
+        run: cargo build --release --target=${{ matrix.target }}
+      - name: Package
+        run: tar -czf jenkins-${{ matrix.target }}.tar.gz -C target/${{ matrix.target }}/release jenkins
+
+  create-release:
+    needs: [release-corss, release-windows, release-apple]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create Release
         uses: softprops/action-gh-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          files: jenkins-${{ matrix.target }}.tar.gz
+          files: |
+            jenkins-*/*.tar.gz
+            jenkins-*/*.zip
