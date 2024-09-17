@@ -32,12 +32,8 @@ static BUNDLES: Lazy<HashMap<String, Arc<ConcurrentFluentBundle>>> = Lazy::new(|
     for file in LocaleAssets::iter() {
         if let Some(content) = LocaleAssets::get(&file) {
             let lang = file.as_ref().split('.').next().unwrap().to_string();
-            let resource = FluentResource::try_new(
-                std::str::from_utf8(content.data.as_ref())
-                    .unwrap()
-                    .to_owned(),
-            )
-            .unwrap();
+            let resource =
+                FluentResource::try_new(std::str::from_utf8(content.data.as_ref()).unwrap().to_owned()).unwrap();
             let mut bundle = ConcurrentFluentBundle::new_concurrent(vec![lang.parse().unwrap()]);
             bundle.add_resource(resource).unwrap();
             bundles.insert(lang, Arc::new(bundle));
@@ -76,9 +72,7 @@ impl I18n {
 
     #[allow(dead_code)]
     pub fn t(key: &str, args: Option<&[(&str, FluentValue)]>, locale: Option<&str>) -> String {
-        let locale = locale
-            .map(|l| l.to_string())
-            .unwrap_or_else(Self::locale);
+        let locale = locale.map(|l| l.to_string()).unwrap_or_else(Self::locale);
         let bundle = get_bundle(&locale);
 
         let mut fluent_args = FluentArgs::new();
@@ -104,8 +98,7 @@ fn get_bundle(locale: &str) -> Arc<ConcurrentFluentBundle> {
     let requested_locale = locale
         .parse::<LanguageIdentifier>()
         .unwrap_or_else(|_| DEFAULT_LOCALE.parse().unwrap());
-    let available_locales: Vec<LanguageIdentifier> =
-        BUNDLES.keys().map(|s| s.parse().unwrap()).collect();
+    let available_locales: Vec<LanguageIdentifier> = BUNDLES.keys().map(|s| s.parse().unwrap()).collect();
     let default_locale: LanguageIdentifier = DEFAULT_LOCALE.parse().unwrap();
 
     let negotiated = negotiate_languages(

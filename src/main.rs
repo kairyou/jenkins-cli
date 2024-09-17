@@ -37,8 +37,7 @@ static CTRL_C_PRESSED: atomic::AtomicBool = atomic::AtomicBool::new(false);
 // Flag indicating whether the Ctrl+C handling logic has been completed
 static CTRL_C_HANDLED: Lazy<atomic::AtomicBool> = Lazy::new(|| atomic::AtomicBool::new(false));
 // Flag indicating whether a build is currently in progress
-static LOADING: Lazy<std::sync::Arc<Mutex<bool>>> =
-    Lazy::new(|| std::sync::Arc::new(Mutex::new(false)));
+static LOADING: Lazy<std::sync::Arc<Mutex<bool>>> = Lazy::new(|| std::sync::Arc::new(Mutex::new(false)));
 
 #[tokio::main]
 async fn main() {
@@ -104,10 +103,7 @@ async fn main() {
 
 // actions
 
-fn filter_projects(
-    projects: Vec<jenkins::JenkinsJob>,
-    config: &JenkinsConfig,
-) -> Vec<jenkins::JenkinsJob> {
+fn filter_projects(projects: Vec<jenkins::JenkinsJob>, config: &JenkinsConfig) -> Vec<jenkins::JenkinsJob> {
     fn compile_patterns(patterns: Option<&Vec<String>>) -> Vec<Regex> {
         patterns
             .map(|patterns| {
@@ -128,13 +124,9 @@ fn filter_projects(
             let display_name = &project.display_name;
             let name = &project.name;
 
-            let matches_include = includes.is_empty()
-                || includes
-                    .iter()
-                    .any(|re| re.is_match(display_name) || re.is_match(name));
-            let matches_exclude = excludes
-                .iter()
-                .any(|re| re.is_match(display_name) || re.is_match(name));
+            let matches_include =
+                includes.is_empty() || includes.iter().any(|re| re.is_match(display_name) || re.is_match(name));
+            let matches_exclude = excludes.iter().any(|re| re.is_match(display_name) || re.is_match(name));
             matches_include && !matches_exclude
         })
         .collect()
@@ -147,10 +139,7 @@ async fn menu() {
     let auth = format!("{}:{}", config.user, config.token);
     // let mut client = JenkinsClient::new(&config.url, &auth);
     let (event_sender, mut event_receiver) = mpsc::channel::<Event>(100);
-    let client = std::sync::Arc::new(tokio::sync::RwLock::new(JenkinsClient::new(
-        &config.url,
-        &auth,
-    )));
+    let client = std::sync::Arc::new(tokio::sync::RwLock::new(JenkinsClient::new(&config.url, &auth)));
     // println!("config.url: {}", config.url); // client.read().await.base_url
     let mut history = History::new().unwrap();
 
@@ -179,7 +168,7 @@ async fn menu() {
     let latest_index: usize = latest_history
         .and_then(|entry| {
             Some(entry.name.as_str()) // String => &str
-                    .and_then(|entry_name| projects.iter().position(|p| p.name == entry_name))
+                .and_then(|entry_name| projects.iter().position(|p| p.name == entry_name))
         })
         .unwrap_or(0);
     if latest_index != 0 && latest_index < projects.len() {
@@ -298,10 +287,7 @@ async fn menu() {
     *LOADING.lock().await = true;
     let build_url = {
         let client_guard = client.read().await;
-        match client_guard
-            .poll_queue_item(&queue_location, &mut event_receiver)
-            .await
-        {
+        match client_guard.poll_queue_item(&queue_location, &mut event_receiver).await {
             Ok(url) => {
                 *LOADING.lock().await = false;
                 url
@@ -320,10 +306,7 @@ async fn menu() {
 
     *LOADING.lock().await = true;
     let client_guard = client.read().await;
-    match client_guard
-        .poll_build_status(&build_url, &mut event_receiver)
-        .await
-    {
+    match client_guard.poll_build_status(&build_url, &mut event_receiver).await {
         Ok(_) => {
             // println!("{}", "Build completed successfully.".green());
             *LOADING.lock().await = false;
@@ -364,19 +347,14 @@ async fn menu() {
             // }
             println!(
                 "Log URL: {}",
-                format_url(&format!("{}/consoleText", build_url))
-                    .underline()
-                    .blue(),
+                format_url(&format!("{}/consoleText", build_url)).underline().blue(),
             );
         }
     }
 }
 
 /// Handle Ctrl+C
-async fn handle_ctrl_c(
-    client: std::sync::Arc<tokio::sync::RwLock<JenkinsClient>>,
-    event_sender: mpsc::Sender<Event>,
-) {
+async fn handle_ctrl_c(client: std::sync::Arc<tokio::sync::RwLock<JenkinsClient>>, event_sender: mpsc::Sender<Event>) {
     // Listen for Ctrl+C in a separate task, used to exit immediately when Ctrl+C is triggered multiple times
     // @zh 独立的任务监听 Ctrl+C, 用于多次触发 Ctrl+C 时立即退出
     tokio::spawn({
@@ -406,11 +384,7 @@ async fn handle_ctrl_c(
         }
 
         let prompt = t!("cancel-build-prompt").red().bold().to_string();
-        let confirm = match dialoguer::Confirm::new()
-            .with_prompt(prompt)
-            .default(false)
-            .interact()
-        {
+        let confirm = match dialoguer::Confirm::new().with_prompt(prompt).default(false).interact() {
             Ok(result) => result,
             Err(_e) => {
                 // eprintln!("Error reading input: {}", _e);

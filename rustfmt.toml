@@ -1,6 +1,6 @@
-max_width = 100
+max_width = 120
 tab_spaces = 4
 
-normalize_comments = true
-wrap_comments = true
-comment_width = 100
+# normalize_comments = true
+# wrap_comments = true
+# comment_width = 120

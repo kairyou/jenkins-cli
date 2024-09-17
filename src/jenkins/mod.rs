@@ -59,10 +59,7 @@ const SUPPORTED_PARAMETER_DEFINITIONS: &[&[u8]] = &[
 
 /// extract text from xml
 fn extract_text(e: quick_xml::events::BytesText) -> String {
-    e.unescape()
-        .unwrap_or_else(|_| Cow::from(""))
-        .trim()
-        .to_string()
+    e.unescape().unwrap_or_else(|_| Cow::from("")).trim().to_string()
 }
 
 pub fn parse_jenkins_job_parameter(xml_data: &str) -> Vec<JenkinsJobParameter> {

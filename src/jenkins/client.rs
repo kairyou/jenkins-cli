@@ -13,9 +13,7 @@ use crate::t;
 use crate::{
     jenkins::{self, Event, JenkinsJob, JenkinsJobParameter, JenkinsResponse},
     spinner,
-    utils::{
-        clear_previous_line, clear_screen, delay, format_url, get_current_branch, get_git_branches,
-    },
+    utils::{clear_previous_line, clear_screen, delay, format_url, get_current_branch, get_git_branches},
 };
 
 /// Represents a Jenkins client.
@@ -35,10 +33,7 @@ impl JenkinsClient {
     ///
     /// # Returns
     /// A `Result` containing the headers or an `anyhow::Error` if the headers cannot be built.
-    fn build_headers(
-        &self,
-        extra_headers: Option<HashMap<String, String>>,
-    ) -> Result<HeaderMap, anyhow::Error> {
+    fn build_headers(&self, extra_headers: Option<HashMap<String, String>>) -> Result<HeaderMap, anyhow::Error> {
         let mut headers = HeaderMap::new();
         headers.insert(
             AUTHORIZATION,
@@ -47,8 +42,7 @@ impl JenkinsClient {
         if let Some(extra) = extra_headers {
             for (key, value) in extra {
                 headers.insert(
-                    key.parse::<HeaderName>()
-                        .map_err(|e| anyhow!(e.to_string()))?,
+                    key.parse::<HeaderName>().map_err(|e| anyhow!(e.to_string()))?,
                     HeaderValue::from_str(&value).map_err(|e| anyhow!(e.to_string()))?,
                 );
             }
@@ -65,10 +59,7 @@ impl JenkinsClient {
     /// # Returns
     ///
     /// A `Result` indicating success or an `anyhow::Error` if the response is not successful.
-    async fn handle_response(
-        &self,
-        result: Result<reqwest::Response, reqwest::Error>,
-    ) -> Result<reqwest::Response> {
+    async fn handle_response(&self, result: Result<reqwest::Response, reqwest::Error>) -> Result<reqwest::Response> {
         match result {
             Ok(response) => {
                 if response.status() == reqwest::StatusCode::UNAUTHORIZED {
@@ -77,14 +68,8 @@ impl JenkinsClient {
                 }
                 if !response.status().is_success() {
                     // not 2xx
-                    eprintln!(
-                        "Error: HTTP request failed with status code {}",
-                        response.status()
-                    );
-                    return Err(anyhow::anyhow!(
-                        "HTTP request failed: {}",
-                        response.status()
-                    ));
+                    eprintln!("Error: HTTP request failed with status code {}", response.status());
+                    return Err(anyhow::anyhow!("HTTP request failed: {}", response.status()));
                 }
                 Ok(response)
             }
@@ -162,10 +147,7 @@ impl JenkinsClient {
     /// # Returns
     ///
     /// A `Result` containing a vector of `JenkinsJobParameter` or an `anyhow::Error` if the request fails.
-    pub async fn get_job_parameters(
-        &mut self,
-        job_url: &str,
-    ) -> Result<Vec<JenkinsJobParameter>, anyhow::Error> {
+    pub async fn get_job_parameters(&mut self, job_url: &str) -> Result<Vec<JenkinsJobParameter>, anyhow::Error> {
         self.job_url = Some(job_url.to_string());
         // /api/json doesn't have trim information; get full configuration from /config.xml
         // @zh /api/json 无 trim 信息; 从 /config.xml 获取完整配置
@@ -190,26 +172,16 @@ impl JenkinsClient {
     /// # Returns
     ///
     /// A `HashMap` containing the parameter names and their corresponding values.
-    pub async fn prompt_job_parameters(
-        parameter_definitions: Vec<JenkinsJobParameter>,
-    ) -> HashMap<String, String> {
+    pub async fn prompt_job_parameters(parameter_definitions: Vec<JenkinsJobParameter>) -> HashMap<String, String> {
         use dialoguer::theme::ColorfulTheme; // ColorfulTheme/SimpleTheme
         let mut parameters = HashMap::new();
         let mut branches = get_git_branches();
         let branch_names = ["GIT_BRANCH", "gitBranch"];
 
         // for string, text, password
-        fn prompt_user_input(
-            fmt_name: &str,
-            fmt_desc: &str,
-            default_value: &str,
-            trim: Option<bool>,
-        ) -> String {
+        fn prompt_user_input(fmt_name: &str, fmt_desc: &str, default_value: &str, trim: Option<bool>) -> String {
             let user_value: String = dialoguer::Input::with_theme(&ColorfulTheme::default())
-                .with_prompt(format!("{}{}", 
-                    t!("prompt-input", "name" => fmt_name),
-                    fmt_desc
-                ))
+                .with_prompt(format!("{}{}", t!("prompt-input", "name" => fmt_name), fmt_desc))
                 .with_initial_text(default_value.to_string())
                 .allow_empty(true)
                 .interact_text()
@@ -223,7 +195,7 @@ impl JenkinsClient {
                 user_value
             }
         }
-        
+
         for param in parameter_definitions {
             // println!("param: {:?}", param);
             let JenkinsJobParameter {
@@ -246,10 +218,7 @@ impl JenkinsClient {
             let final_value = if let Some(choices) = choices {
                 // Use Select to display the Choice list
                 let selection = dialoguer::FuzzySelect::with_theme(&ColorfulTheme::default())
-                    .with_prompt(format!("{}{}", 
-                        t!("prompt-select", "name" => &fmt_name),
-                        fmt_desc
-                    ))
+                    .with_prompt(format!("{}{}", t!("prompt-select", "name" => &fmt_name), fmt_desc))
                     .items(&choices)
                     .default(0)
                     .interact()
@@ -261,10 +230,7 @@ impl JenkinsClient {
             } else if param_type.as_deref() == Some("boolean") {
                 let default_bool = default_value.parse::<bool>().unwrap_or(false);
                 let value = dialoguer::Confirm::with_theme(&ColorfulTheme::default())
-                    .with_prompt(format!("{}{}", 
-                        t!("prompt-confirm", "name" => fmt_name),
-                        fmt_desc
-                    ))
+                    .with_prompt(format!("{}{}", t!("prompt-confirm", "name" => fmt_name), fmt_desc))
                     .default(default_bool)
                     .show_default(true)
                     .interact()
@@ -274,10 +240,7 @@ impl JenkinsClient {
                 value.to_string()
             } else if param_type.as_deref() == Some("password") {
                 let input = dialoguer::Password::with_theme(&ColorfulTheme::default())
-                    .with_prompt(format!("{}{}", 
-                        t!("prompt-password", "name" => &fmt_name),
-                        fmt_desc
-                    ))
+                    .with_prompt(format!("{}{}", t!("prompt-password", "name" => &fmt_name), fmt_desc))
                     .allow_empty_password(true)
                     .interact()
                     .unwrap_or_else(|_e| {
@@ -323,7 +286,8 @@ impl JenkinsClient {
                     ..ColorfulTheme::default()
                 };
                 let selection = dialoguer::FuzzySelect::with_theme(&custom_theme)
-                    .with_prompt(format!("{}{}", 
+                    .with_prompt(format!(
+                        "{}{}",
                         t!("prompt-select-branch", "name" => &fmt_name),
                         fmt_desc
                     ))
@@ -372,13 +336,7 @@ impl JenkinsClient {
         // Triggering with format!("{}/build?delay=0sec", job_url) doesn't use a queue
         let url = format_url(&format!("{}/buildWithParameters", job_url));
         let headers = self.build_headers(None)?;
-        let result = self
-            .client
-            .post(&url)
-            .headers(headers)
-            .form(&parameters)
-            .send()
-            .await;
+        let result = self.client.post(&url).headers(headers).form(&parameters).send().await;
         let response = self.handle_response(result).await?;
         // println!("params: {:?}", parameters);
         // queue URL, e.g. http://jenkins_url/queue/item/1/
@@ -528,10 +486,7 @@ impl JenkinsClient {
         build_url: &str,
         start: usize,
     ) -> Result<(String, usize), anyhow::Error> {
-        let api_url = format_url(&format!(
-            "{}/logText/progressiveText?start={}",
-            build_url, start
-        ));
+        let api_url = format_url(&format!("{}/logText/progressiveText?start={}", build_url, start));
         let headers = self.build_headers(None)?;
         let result = self.client.get(&api_url).headers(headers).send().await;
         let response = self.handle_response(result).await?;

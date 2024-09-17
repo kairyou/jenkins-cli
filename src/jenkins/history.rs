@@ -35,8 +35,7 @@ impl History {
     }
 
     pub fn new() -> Result<Self> {
-        let mut file_path =
-            home_dir().ok_or_else(|| anyhow::anyhow!("Failed to get home directory"))?;
+        let mut file_path = home_dir().ok_or_else(|| anyhow::anyhow!("Failed to get home directory"))?;
         file_path.push(HISTORY_FILE);
 
         // auto create history file
@@ -71,8 +70,7 @@ impl History {
             .context("Failed to read file content")?;
         // println!("load_history: {}", file_content);
 
-        let entries: Vec<HistoryItem> =
-            serde_yaml::from_str(&file_content).context("Failed to parse history file")?;
+        let entries: Vec<HistoryItem> = serde_yaml::from_str(&file_content).context("Failed to parse history file")?;
         // println!("load_history: {:?}", entries);
         self.entries = entries;
         Ok(())
@@ -92,11 +90,7 @@ impl History {
 
     pub fn upsert_history(&mut self, entry: &mut HistoryItem) -> Result<()> {
         entry.created_at = Some(current_timestamp());
-        if let Some(existing_entry) = self
-            .entries
-            .iter_mut()
-            .find(|e| Self::matches_entry(e, entry))
-        {
+        if let Some(existing_entry) = self.entries.iter_mut().find(|e| Self::matches_entry(e, entry)) {
             *existing_entry = entry.clone();
         } else {
             self.entries.push(entry.clone());
@@ -128,11 +122,7 @@ impl History {
     where
         F: FnOnce(&mut HistoryItem),
     {
-        if let Some(entry) = self
-            .entries
-            .iter_mut()
-            .find(|e| Self::matches_entry(e, info))
-        {
+        if let Some(entry) = self.entries.iter_mut().find(|e| Self::matches_entry(e, info)) {
             update_fn(entry);
             self.save_history()
         } else {

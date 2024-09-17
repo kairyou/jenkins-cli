@@ -87,7 +87,6 @@ token: ''
 
     println!("{}: '{}'", t!("config-file"), config_path.display());
     let config_content = fs::read_to_string(&config_path).expect(&t!("read-config-file-failed"));
-    let config: Vec<JenkinsConfig> =
-        serde_yaml::from_str(&config_content).expect(&t!("parse-config-file-failed"));
+    let config: Vec<JenkinsConfig> = serde_yaml::from_str(&config_content).expect(&t!("parse-config-file-failed"));
     Ok(config)
 }
