@@ -92,8 +92,6 @@ jobs:
   #       run: cargo install wasm-pack
   #     - name: Build
   #       run: wasm-pack build --target web
-  #     - name: Package
-  #       run: tar -czf jenkins-wasm32-unknown-unknown.tar.gz -C target/wasm32-unknown-unknown/release jenkins
 
   create-release:
     needs: [release-corss, release-windows, release-apple]
@@ -112,6 +110,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          files: |
-            jenkins-*/*.tar.gz
-            jenkins-*/*.zip
+          files: artifacts/*
+# "Settings" > "Actions" > "General"
+# "Workflow permissions" > "Read and write permissions"
