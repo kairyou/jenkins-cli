@@ -27,7 +27,6 @@ pub fn clear_line() {
 }
 
 /// Moves the cursor up by one line and clears that line
-/// @zh 移动光标到上一行并清除该行的内容
 pub fn clear_previous_line() {
     execute!(stdout(), cursor::MoveUp(1)).unwrap();
     clear_line();
@@ -59,6 +58,7 @@ pub fn current_timestamp() -> i64 {
 }
 
 /// check if ctrl+c is pressed
+#[doc(hidden)]
 #[allow(dead_code)]
 pub fn check_ctrl_c(ctrl_c_pressed: &Arc<AtomicBool>) -> Result<(), anyhow::Error> {
     if ctrl_c_pressed.load(Ordering::SeqCst) {
@@ -108,8 +108,8 @@ pub fn version_compare(current_version: &str, target_version: &str, op: &str) ->
 }
 
 /// flush stdin buffer (prevent `stdin` from reading previous inputs, such as pressing `Enter` key)
-/// @zh 清空输入缓冲区 (防止 `stdin` 读取到之前的输入, 例如按下 `Enter` 键)
 pub fn flush_stdin() {
+    // @zh 清空输入缓冲区 (防止 `stdin` 读取到之前的输入, 例如按下 `Enter` 键)
     if let Err(e) = flush_stdin_impl() {
         eprintln!("Failed to flush stdin: {}", e);
     }

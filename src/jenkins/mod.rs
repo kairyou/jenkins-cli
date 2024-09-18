@@ -3,9 +3,11 @@ use std::borrow::Cow;
 use std::io::BufReader;
 
 pub mod client;
+#[doc(hidden)]
 pub mod history;
 
 #[derive(Debug, Clone)]
+#[doc(hidden)]
 pub enum Event {
     StopSpinner,
 }
@@ -62,6 +64,7 @@ fn extract_text(e: quick_xml::events::BytesText) -> String {
     e.unescape().unwrap_or_else(|_| Cow::from("")).trim().to_string()
 }
 
+/// Parse Jenkins job parameters from XML data
 pub fn parse_jenkins_job_parameter(xml_data: &str) -> Vec<JenkinsJobParameter> {
     use quick_xml::events::Event;
     let mut reader = quick_xml::Reader::from_reader(BufReader::new(xml_data.as_bytes()));

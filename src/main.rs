@@ -356,7 +356,6 @@ async fn menu() {
 /// Handle Ctrl+C
 async fn handle_ctrl_c(client: std::sync::Arc<tokio::sync::RwLock<JenkinsClient>>, event_sender: mpsc::Sender<Event>) {
     // Listen for Ctrl+C in a separate task, used to exit immediately when Ctrl+C is triggered multiple times
-    // @zh 独立的任务监听 Ctrl+C, 用于多次触发 Ctrl+C 时立即退出
     tokio::spawn({
         async move {
             loop {
@@ -378,7 +377,6 @@ async fn handle_ctrl_c(client: std::sync::Arc<tokio::sync::RwLock<JenkinsClient>
     if *LOADING.lock().await {
         flush_stdin();
         // Wait for the spinner to stop to prevent it from obscuring the prompt
-        // @zh 等待 spinner 停止，防止 spinner 遮挡询问文字
         while *LOADING.lock().await {
             tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
         }

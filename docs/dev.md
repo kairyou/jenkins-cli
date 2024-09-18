@@ -53,13 +53,18 @@ proto init
 # cargo test -v --no-fail-fast
 # 静态分析, 检查潜在错误/性能问题/代码风格
 # cargo clippy # --fix --allow-dirty
+# cargo fmt -- --check # Check code formatting
+# cargo doc --no-deps # Generate documentation
+# python3 -m http.server 8000 -d ./target/doc/jenkins/ # Preview documentation
 # 分析二进制文件的大小
 # cargo bloat --release --crates # cargo install cargo-bloat
 
 # cargo install cargo-release
 cargo release patch --execute --no-publish # auto update version and push tag to remote
-# Retrigger release
-# git tag -d v0.1.1 && git push origin :refs/tags/v0.1.1 && git tag v0.1.1 && git push origin v0.1.1;
+
+# publish to cargo.io
+# cargo login
+# cargo publish
 ```
 
 <!-- 

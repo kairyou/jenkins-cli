@@ -351,7 +351,6 @@ impl JenkinsClient {
 
     /// Poll the queue item until it is executed and get the build URL
     /// e.g. http://jenkins_url/job/job_name/1/
-    /// @zh 轮询队列项直到其被执行，获取构建URL
     pub async fn poll_queue_item(
         &self,
         queue_url: &str,
@@ -480,7 +479,6 @@ impl JenkinsClient {
     }
 
     /// Retrieves the incremental part of the Jenkins build log
-    /// @zh 获取 Jenkins 构建日志的增量部分
     pub async fn get_jenkins_progressive_text(
         &self,
         build_url: &str,
@@ -560,6 +558,7 @@ impl JenkinsClient {
 
 /// Prevent newline when Enter key is pressed
 /// @zh 阻止回车换行. 显示 spinner 时回车, windows不会换行, linux会换行
+#[doc(hidden)]
 async fn check_for_enter_key(should_exit: std::sync::Arc<AtomicBool>) -> Result<(), anyhow::Error> {
     use crossterm::event::{self, Event, KeyCode};
     use std::time::Duration;

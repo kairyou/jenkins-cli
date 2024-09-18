@@ -29,7 +29,7 @@ pub struct History {
 
 impl History {
     /// Check if two history entries match
-    /// @zh 检查两个历史记录项是否匹配
+    #[doc(hidden)]
     fn matches_entry(entry: &HistoryItem, info: &HistoryItem) -> bool {
         entry.job_url == info.job_url && entry.name == info.name
     }
@@ -99,6 +99,7 @@ impl History {
     }
 
     /// get the history item by the job_url and name
+    #[doc(hidden)]
     pub fn get_history(&self, info: &HistoryItem, base_url: Option<&str>) -> Option<HistoryItem> {
         // self.entries.iter().find(|e| Self::matches_entry(e, info)).cloned()
         self.entries
@@ -109,6 +110,7 @@ impl History {
     }
 
     /// get the latest history item
+    #[doc(hidden)]
     pub fn get_latest_history(&self, base_url: Option<&str>) -> Option<&HistoryItem> {
         let items = self
             .entries

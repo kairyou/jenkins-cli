@@ -118,6 +118,7 @@ fn get_bundle(locale: &str) -> Arc<ConcurrentFluentBundle> {
 }
 
 #[macro_export]
+#[doc(hidden)]
 macro_rules! t {
     // Only key
     ($key:expr) => {
