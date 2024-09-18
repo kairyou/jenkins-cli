@@ -42,10 +42,9 @@ static LOADING: Lazy<std::sync::Arc<Mutex<bool>>> = Lazy::new(|| std::sync::Arc:
 #[tokio::main]
 async fn main() {
     // I18n::set_locale("zh-CN");
-    initialize_config().await.unwrap();
 
     let matches = Command::new("jenkins")
-        .version("1.0")
+        .version(env!("CARGO_PKG_VERSION"))
         // .author("Your Name <your.email@example.com>")
         .about("A CLI tool for deploying projects using Jenkins")
         .arg(
@@ -74,6 +73,7 @@ async fn main() {
         )
         .get_matches();
     // check_unsupported_terminal();
+    initialize_config().await.unwrap();
     clear_screen();
     {
         let mut config = CONFIG.lock().await;

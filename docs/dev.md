@@ -59,8 +59,7 @@ proto init
 # cargo install cargo-release
 cargo release patch --execute --no-publish # auto update version and push tag to remote
 # Retrigger release
-# git tag -d v0.1.1 && git push origin :refs/tags/v0.1.1 # Delete tag
-# git tag v0.1.1 && git push origin v0.1.1 # Push tag
+# git tag -d v0.1.1 && git push origin :refs/tags/v0.1.1 && git tag v0.1.1 && git push origin v0.1.1;
 ```
 
 <!-- 
