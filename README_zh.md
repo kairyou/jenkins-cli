@@ -22,6 +22,14 @@
 bash <(curl -fsSL https://raw.githubusercontent.com/kairyou/jenkins-cli/main/scripts/install.sh)
 ```
 
+或者使用 ghp.ci 镜像（如果 GitHub 无法访问）
+
+```bash
+bash <(curl -fsSL https://ghp.ci/raw.githubusercontent.com/kairyou/jenkins-cli/main/scripts/install.sh)
+```
+
+或者，你可以从 [Releases 页面](https://github.com/kairyou/jenkins-cli/releases) 下载二进制文件。
+
 ## 使用
 
 在设置好配置文件（见[配置](#configuration)部分）后，可以直接运行：

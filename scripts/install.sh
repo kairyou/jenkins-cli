@@ -6,6 +6,7 @@ DISTRO=$( ([[ -e "/usr/bin/yum" ]] && echo 'CentOS') || ([[ -e "/usr/bin/apt" ]]
 
 IS_WINDOWS=$([[ "$OS" == "mingw"* || "$OS" == "msys"* || "$OS" == "cygwin"*  ]] && echo true || echo false)
 CLI_NAME="jenkins"
+GITHUB_MIRROR="https://ghp.ci/"
 
 cleanup() {
   [[ -f "$FILENAME" ]] && rm "$FILENAME"
@@ -57,18 +58,28 @@ get_filename() {
     echo "jenkins-${arch}-${platform}${clibtype:+-$clibtype}.tar.gz"
 }
 
+get_latest_version() {
+  # local version=$(curl -s "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+  local repo=$1
+  local url="${GITHUB_MIRROR}github.com/${repo}/releases/latest"
+  local version=$(curl -s -I "$url" | grep -i "^location:" | sed -E 's/.*\/([^/]+)$/\1/' | tr -d '[:space:]')
+  echo "${version}"
+}
 main() {
     FILENAME=$(get_filename)
     # echo "filename: $FILENAME"
-
-    # Set GitHub repository
     REPO="kairyou/jenkins-cli"
-    VERSION=$(curl -s "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+    VERSION=$(get_latest_version "$REPO")
+    echo "version: $VERSION"
+    if [ -z "$VERSION" ]; then
+      echo "Failed to get latest version"
+      exit 1
+    fi
 
     # Download file
     echo "Downloading $FILENAME (version: $VERSION)..."
-    DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/${FILENAME}"
-    curl -#Lo "$FILENAME" "$DOWNLOAD_URL"
+    DOWNLOAD_URL="${GITHUB_MIRROR}github.com/${REPO}/releases/download/${VERSION}/${FILENAME}"
+    curl -#Lo "$FILENAME" "$DOWNLOAD_URL" || { echo "Failed to download $FILENAME"; exit 1; }
 
     # Extract file
     echo "Extracting file..."

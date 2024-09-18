@@ -22,6 +22,14 @@ To install the Jenkins CLI tool, use the following command:
 bash <(curl -fsSL https://raw.githubusercontent.com/kairyou/jenkins-cli/main/scripts/install.sh)
 ```
 
+Or use ghp.ci mirror (if GitHub is inaccessible)
+
+```bash
+bash <(curl -fsSL https://ghp.ci/raw.githubusercontent.com/kairyou/jenkins-cli/main/scripts/install.sh)
+```
+
+Alternatively, you can download the binary file from the [Releases page](https://github.com/kairyou/jenkins-cli/releases).
+
 ## Usage
 
 After setting up the configuration file (see [Configuration](#configuration) section), you can simply run:

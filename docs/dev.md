@@ -80,14 +80,26 @@ cargo run --
 
 ```bash
 # Install local cross-compilation toolchain
-# sudo apt install -y gcc-mingw-w64 # rustup target add x86_64-pc-windows-gnu
+# sudo apt install -y gcc-mingw-w64
+# rustup target add x86_64-pc-windows-gnu
 
 # cargo build --release
 
-cross build --target x86_64-pc-windows-gnu --release # build for windows
-cross build --target x86_64-unknown-linux-gnu --release # build for linux
-cross build --target x86_64-apple-darwin --release # build for intel mac
-cross build --target aarch64-apple-darwin --release # build for M1/M2 Mac
+cargo build --target x86_64-pc-windows-gnu --release # build for windows
+cargo build --target x86_64-unknown-linux-gnu --release # build for linux
+
+# rustup target add aarch64-apple-darwin # for mac m1 build
+# rustup target add x86_64-apple-darwin # for mac intel build
+# use osxcross for macOs build
+# git clone https://github.com/tpoechtrager/osxcross.git /opt/osxcross
+# cd /opt/osxcross;
+# macOS SDK: https://github.com/tpoechtrager/osxcross/tree/master?tab=readme-ov-file#packaging-the-sdk-on-recent-macos-xcode
+# ./tools/gen_sdk_package.sh /path/to/Xcode_12.4.xip # get sdk from xcode
+# mv MacOSX10.15.sdk.tar.xz /opt/osxcross/tarballs/
+# UNATTENDED=1 OSX_VERSION_MIN=10.7 ./build.sh
+# export PATH="$PATH:/opt/osxcross/bin"; export CC=o64-clang; export CXX=o64-clang++;
+# cargo build --target x86_64-apple-darwin --release # build for intel mac
+# cargo build --target aarch64-apple-darwin --release # build for M1/M2 Mac
 ```
 
 ### Test
