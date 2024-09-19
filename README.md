@@ -16,7 +16,7 @@ A powerful and efficient Jenkins CLI tool written in Rust. Simplifies deployment
 
 ## Installation
 
-To install the Jenkins CLI tool, use the following command:
+To install the Jenkins CLI tool, use one of the following methods:
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/kairyou/jenkins-cli/main/scripts/install.sh)
@@ -26,6 +26,12 @@ Or use ghp.ci mirror (if GitHub is inaccessible)
 
 ```bash
 bash <(curl -fsSL https://ghp.ci/raw.githubusercontent.com/kairyou/jenkins-cli/main/scripts/install.sh)
+```
+
+If you have Rust and Cargo installed, you can install Jenkins CLI directly from crates.io:
+
+```bash
+cargo install jenkins
 ```
 
 Alternatively, you can download the binary file from the [Releases page](https://github.com/kairyou/jenkins-cli/releases).

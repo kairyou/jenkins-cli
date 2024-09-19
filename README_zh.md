@@ -16,7 +16,7 @@
 
 ## 安装
 
-要安装 Jenkins CLI 工具，请使用以下命令：
+安装 Jenkins CLI 工具，请使用以下方法之一：
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/kairyou/jenkins-cli/main/scripts/install.sh)
@@ -28,7 +28,13 @@ bash <(curl -fsSL https://raw.githubusercontent.com/kairyou/jenkins-cli/main/scr
 bash <(curl -fsSL https://ghp.ci/raw.githubusercontent.com/kairyou/jenkins-cli/main/scripts/install.sh)
 ```
 
-或者，你可以从 [Releases 页面](https://github.com/kairyou/jenkins-cli/releases) 下载二进制文件。
+如果已安装 Rust 和 Cargo，可以直接从 crates.io 安装 Jenkins CLI：
+
+```bash
+cargo install jenkins
+```
+
+或者，可以从 [Releases 页面](https://github.com/kairyou/jenkins-cli/releases) 下载二进制文件。
 
 ## 使用
 
