@@ -53,22 +53,28 @@ This command will:
 
 ## Configuration
 
-Create a file named `.jenkins.yaml` in your home directory with the following content:
+Create a file named `.jenkins.toml` in your home directory with the following content:
 
-```yaml
-# $HOME/.jenkins.yaml
-- name: "SIT"
-  url: "https://jenkins-sit.your-company.com"
-  user: "your-username"
-  token: "your-api-token"
-  includes: []
-  excludes: []
-# - name: "PROD"
-#   url: "https://jenkins-prod.your-company.com"
-#   user: "your-username"
-#   token: "your-api-token"
-#   includes: ["frontend", "backend"]
-#   excludes: ["test"]
+```toml
+# $HOME/.jenkins.toml
+[config]
+# language = "en-US" # (optional), e.g. zh-CN, en-US
+
+[[jenkins]]
+name = "SIT"
+url = "https://jenkins-sit.your-company.com"
+user = "your-username"
+token = "your-api-token"
+# includes = []
+# excludes = []
+
+# [[jenkins]]
+# name = "PROD"
+# url = "https://jenkins-prod.your-company.com"
+# user = "your-username"
+# token = "your-api-token"
+# includes = ["frontend", "backend"]
+# excludes = ["test"]
 ```
 
 ### Configuration Options
@@ -100,7 +106,7 @@ To generate an API token:
 3. Click on "Configure" in the left sidebar
 4. In the API Token section, click "Add new Token"
 5. Give your token a name and click "Generate"
-6. Copy the generated token and paste it into your `.jenkins.yaml` file
+6. Copy the generated token and paste it into your `.jenkins.toml` file
 
 Note: Keep your API token secure. Do not share it or commit it to version control.
 

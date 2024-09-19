@@ -26,6 +26,7 @@ sudo apt install -y libssl-dev pkg-config
 # cargo add serde --features derive # 序列化/反序列化
 # cargo add serde_json # json
 # cargo add serde_yaml # yaml
+# cargo add toml # toml
 # cargo add quick-xml --features "serialize" # xml
 # cargo add dirs # dirs::home_dir
 # cargo add tokio --features "full" # async/await

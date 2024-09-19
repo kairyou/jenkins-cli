@@ -53,22 +53,28 @@ jenkins
 
 ## 配置
 
-在`$HOME`目录下创建一个名为`.jenkins.yaml`的文件，内容如下：
+在`$HOME`目录下创建一个名为`.jenkins.toml`的文件，内容如下：
 
-```yaml
-# $HOME/.jenkins.yaml
-- name: "SIT"
-  url: "https://jenkins-sit.your-company.com"
-  user: "your-username"
-  token: "your-api-token"
-  includes: []
-  excludes: []
-# - name: "PROD"
-#   url: "https://jenkins-prod.your-company.com"
-#   user: "your-username"
-#   token: "your-api-token"
-#   includes: ["frontend", "backend"]
-#   excludes: ["test"]
+```toml
+# $HOME/.jenkins.toml
+[config]
+# language = "en-US" # (optional), e.g. zh-CN, en-US
+
+[[jenkins]]
+name = "SIT"
+url = "https://jenkins-sit.your-company.com"
+user = "your-username"
+token = "your-api-token"
+# includes = []
+# excludes = []
+
+# [[jenkins]]
+# name = "PROD"
+# url = "https://jenkins-prod.your-company.com"
+# user = "your-username"
+# token = "your-api-token"
+# includes = ["frontend", "backend"]
+# excludes = ["test"]
 ```
 
 ### 配置选项
@@ -100,7 +106,7 @@ Jenkins User ID 就是登录 Jenkins 网页界面的用户名。
 3. 在左侧边栏中点击"配置"
 4. 在 API 令牌部分，点击"添加新令牌"
 5. 为你的令牌命名，然后点击"生成"
-6. 复制生成的令牌，并将其粘贴到你的`.jenkins.yaml`文件中
+6. 复制生成的令牌，并将其粘贴到你的`.jenkins.toml`文件中
 
 注意：请妥善保管你的 API 令牌。不要分享或将其提交到版本控制系统中。
 

@@ -25,7 +25,7 @@ use crate::{
     config::{initialize_config, CONFIG},
     jenkins::{
         client::JenkinsClient,
-        history::{History, HistoryItem},
+        history::{History, HistoryEntry},
         Event,
     },
     models::JenkinsConfig,
@@ -78,13 +78,13 @@ async fn main() {
     {
         let mut config = CONFIG.lock().await;
         if let Some(url) = matches.get_one::<String>("url") {
-            config.url = url.to_string();
+            config.jenkins.url = url.to_string();
         }
         if let Some(user) = matches.get_one::<String>("user") {
-            config.user = user.to_string();
+            config.jenkins.user = user.to_string();
         }
         if let Some(token) = matches.get_one::<String>("token") {
-            config.token = token.to_string();
+            config.jenkins.token = token.to_string();
         }
     }
 
@@ -115,8 +115,8 @@ fn filter_projects(projects: Vec<jenkins::JenkinsJob>, config: &JenkinsConfig) -
             .unwrap_or_default()
     }
 
-    let includes = compile_patterns(config.includes.as_ref());
-    let excludes = compile_patterns(config.excludes.as_ref());
+    let includes = compile_patterns(Some(&config.includes));
+    let excludes = compile_patterns(Some(&config.excludes));
 
     projects
         .into_iter()
@@ -136,10 +136,11 @@ fn filter_projects(projects: Vec<jenkins::JenkinsJob>, config: &JenkinsConfig) -
 async fn menu() {
     let config = CONFIG.lock().await;
     // println!("{}, {}, {}", config.url, config.user, config.token);
-    let auth = format!("{}:{}", config.user, config.token);
+    let jenkins_config = &config.jenkins;
+    let auth = format!("{}:{}", jenkins_config.user, jenkins_config.token);
     // let mut client = JenkinsClient::new(&config.url, &auth);
     let (event_sender, mut event_receiver) = mpsc::channel::<Event>(100);
-    let client = std::sync::Arc::new(tokio::sync::RwLock::new(JenkinsClient::new(&config.url, &auth)));
+    let client = std::sync::Arc::new(tokio::sync::RwLock::new(JenkinsClient::new(&jenkins_config.url, &auth)));
     // println!("config.url: {}", config.url); // client.read().await.base_url
     let mut history = History::new().unwrap();
 
@@ -161,10 +162,10 @@ async fn menu() {
             }
         }
     };
-    let mut projects = filter_projects(projects, &config);
+    let mut projects = filter_projects(projects, &jenkins_config);
     // projects.iter().for_each(|project| println!("Name: {} ({})", project.display_name, project.name));
 
-    let latest_history = history.get_latest_history(Some(&config.url));
+    let latest_history = history.get_latest_history(Some(&jenkins_config.url));
     let latest_index: usize = latest_history
         .and_then(|entry| {
             Some(entry.name.as_str()) // String => &str
@@ -202,17 +203,17 @@ async fn menu() {
     let job = projects.get(selection).expect(&t!("get-project-failed"));
 
     // println!("Selected project: {}", job.display_name.cyan().bold());
-    let job_url = format!("{}/job/{}", config.url, job.name);
+    let job_url = format!("{}/job/{}", jenkins_config.url, job.name);
     // println!("{}", job_url.underline().blue());
 
     // Get build history
     let history_item = history.get_history(
-        &HistoryItem {
+        &HistoryEntry {
             name: job.name.clone(),
             job_url: job_url.clone(),
             ..Default::default()
         },
-        Some(&config.url),
+        Some(&jenkins_config.url),
     );
     // Use last build params
     let use_previous_params = history_item.as_ref().map_or(false, |history| {
@@ -264,7 +265,7 @@ async fn menu() {
     // println!("user_params: {:?}", user_params);
     // std::process::exit(1); // debug params
 
-    let mut history_param = HistoryItem {
+    let mut history_param = HistoryEntry {
         job_url: job_url.clone(),
         name: job.name.clone(),
         display_name: Some(job.display_name.clone()),
@@ -313,7 +314,7 @@ async fn menu() {
             // stop loop
             CTRL_C_HANDLED.store(true, atomic::Ordering::SeqCst);
             if let Err(e) = history.update_field(
-                &HistoryItem {
+                &HistoryEntry {
                     name: job.name.clone(),
                     job_url: job_url.clone(),
                     ..Default::default()
@@ -365,7 +366,7 @@ async fn handle_ctrl_c(client: std::sync::Arc<tokio::sync::RwLock<JenkinsClient>
                     std::process::exit(1);
                 }
                 CTRL_C_PRESSED.store(true, atomic::Ordering::SeqCst);
-                event_sender.send(Event::StopSpinner).await.unwrap();
+                let _ = event_sender.send(Event::StopSpinner).await;
             }
         }
     });
