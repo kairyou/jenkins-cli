@@ -65,11 +65,11 @@ fn load_config() -> Result<Vec<JenkinsConfig>, Box<dyn std::error::Error>> {
         default_path
     };
     let config_content = r#"- name: ''
-url: ''
-user: ''
-token: ''
-# includes: []
-# excludes: []
+  url: ''
+  user: ''
+  token: ''
+  # includes: []
+  # excludes: []
 "#;
     // Create default configuration file
     if !config_path.exists() {

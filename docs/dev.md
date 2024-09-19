@@ -19,7 +19,7 @@ sudo apt install -y libssl-dev pkg-config
 ### Initialize
 
 ```bash
-proto init
+# cargo init # create new project
 # Dependencies
 # cargo add clap --features derive # clap = { version = "4.0", features = ["derive"] }
 
