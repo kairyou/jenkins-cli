@@ -119,7 +119,7 @@ fn migrate_yaml_to_toml(config_path: &PathBuf) -> Result<(), Box<dyn std::error:
             toml::to_string_pretty(&file_config)?
         );
         // println!("{}", toml_content);
-        fs::write(&config_path, toml_content)?;
+        fs::write(config_path, toml_content)?;
         fs::rename(&yaml_path, yaml_path.with_extension("yaml.bak"))?;
     }
     Ok(())

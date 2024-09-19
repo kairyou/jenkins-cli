@@ -162,7 +162,7 @@ async fn menu() {
             }
         }
     };
-    let mut projects = filter_projects(projects, &jenkins_config);
+    let mut projects = filter_projects(projects, jenkins_config);
     // projects.iter().for_each(|project| println!("Name: {} ({})", project.display_name, project.name));
 
     let latest_history = history.get_latest_history(Some(&jenkins_config.url));
