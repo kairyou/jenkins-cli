@@ -71,17 +71,17 @@ fn load_config() -> Result<Vec<JenkinsConfig>, Box<dyn std::error::Error>> {
   # includes: []
   # excludes: []
 "#;
+
+    // println!("{:?}", serde_yaml::to_string(&vec![JenkinsConfig {
+    //   name: "".to_string(),
+    //   url: "".to_string(),
+    //   user: "".to_string(),
+    //   token: "".to_string(),
+    //   includes: Some(vec![]),
+    //   excludes: Some(vec![]),
+    // }]).unwrap());
     // Create default configuration file
     if !config_path.exists() {
-        // let default_config = vec![JenkinsConfig {
-        //     name: "".to_string(),
-        //     url: "".to_string(),
-        //     user: "".to_string(),
-        //     token: "".to_string(),
-        //     includes: Some(vec![".*".to_string(), ".*-deploy".to_string()]),
-        //     excludes: Some(vec![".*-deprecated".to_string()]),
-        // }];
-        // let config_content = serde_yaml::to_string(&default_config).expect("Failed to serialize default configuration");
         fs::write(&config_path, config_content).expect(&t!("write-default-config-failed"));
     }
 

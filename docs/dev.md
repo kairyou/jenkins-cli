@@ -64,7 +64,7 @@ cargo release patch --execute --no-publish # auto update version and push tag to
 
 # publish to cargo.io
 # cargo login
-# cargo publish
+cargo publish # publish to crates.io
 ```
 
 <!-- 
