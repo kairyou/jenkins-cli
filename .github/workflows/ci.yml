@@ -2,33 +2,33 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: ["**"]
     paths-ignore: ["**.md"]
-    tags-ignore: ["v*"]
+    tags-ignore: ["**"]
   pull_request:
-    branches: [ main ]
+    branches: ["**"]
     paths-ignore: ["**.md"]
 
 jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    - uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: stable
-        components: clippy, rustfmt
-    - name: Run clippy
-      run: cargo clippy -- -D warnings
-    - name: Check formatting
-      run: cargo fmt -- --check
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          components: clippy, rustfmt
+      - name: Run clippy
+        run: cargo clippy -- -D warnings
+      - name: Check formatting
+        run: cargo fmt -- --check
 
   test:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    - uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: stable
-    - name: Run tests
-      run: cargo test -v --no-fail-fast
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: Run tests
+        run: cargo test -v --no-fail-fast
