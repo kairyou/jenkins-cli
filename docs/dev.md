@@ -115,7 +115,8 @@ cargo publish # publish to crates.io
 cargo test --test test_git_branches -- --nocapture
 cargo test --test test_version_compare -- --nocapture
 cargo test --test test_jenkins_job_parameter -- --nocapture
-cargo test --test test_history -- --nocapture 
+cargo test --test test_history -- --nocapture
+cargo test --test test_i18n -- --nocapture
 ```
 
 #### FAQs

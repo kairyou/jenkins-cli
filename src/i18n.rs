@@ -26,9 +26,9 @@ struct LocaleAssets;
 
 type ConcurrentFluentBundle = FluentBundle<FluentResource>;
 
-static BUNDLES: Lazy<HashMap<String, Arc<ConcurrentFluentBundle>>> = Lazy::new(|| {
+static BUNDLES: Lazy<RwLock<HashMap<String, Arc<ConcurrentFluentBundle>>>> = Lazy::new(|| RwLock::new(load_bundles()));
+fn load_bundles() -> HashMap<String, Arc<ConcurrentFluentBundle>> {
     let mut bundles = HashMap::new();
-    // let locales_dir = Path::new("locales");
     for file in LocaleAssets::iter() {
         if let Some(content) = LocaleAssets::get(&file) {
             let lang = file.as_ref().split('.').next().unwrap().to_string();
@@ -40,7 +40,7 @@ static BUNDLES: Lazy<HashMap<String, Arc<ConcurrentFluentBundle>>> = Lazy::new(|
         }
     }
     bundles
-});
+}
 
 pub const DEFAULT_LOCALE: &str = "en-US";
 /// Get the system locale
@@ -67,7 +67,8 @@ impl I18n {
 
     #[allow(dead_code)]
     pub fn available_locales() -> Vec<String> {
-        BUNDLES.keys().cloned().collect()
+        let bundles = BUNDLES.read().unwrap();
+        bundles.keys().cloned().collect()
     }
 
     #[allow(dead_code)]
@@ -92,13 +93,44 @@ impl I18n {
             })
             .unwrap_or_else(|| key.to_string())
     }
+
+    #[allow(dead_code)]
+    // #[cfg(test)]
+    pub fn set_test_translations(translations: HashMap<String, HashMap<String, String>>) {
+        let test_bundles = translations
+            .into_iter()
+            .map(|(lang, messages)| {
+                let resource = FluentResource::try_new(
+                    messages
+                        .into_iter()
+                        .map(|(key, value)| format!("{} = {}", key, value))
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                )
+                .unwrap();
+                let mut bundle = ConcurrentFluentBundle::new_concurrent(vec![lang.parse().unwrap()]);
+                bundle.add_resource(resource).unwrap();
+                (lang, Arc::new(bundle))
+            })
+            .collect();
+
+        let mut bundles = BUNDLES.write().unwrap();
+        *bundles = test_bundles;
+    }
+    #[allow(dead_code)]
+    // #[cfg(test)]
+    pub fn reset_translations() {
+        let mut bundles = BUNDLES.write().unwrap();
+        *bundles = load_bundles();
+    }
 }
 
 fn get_bundle(locale: &str) -> Arc<ConcurrentFluentBundle> {
+    let bundles = BUNDLES.read().unwrap();
     let requested_locale = locale
         .parse::<LanguageIdentifier>()
         .unwrap_or_else(|_| DEFAULT_LOCALE.parse().unwrap());
-    let available_locales: Vec<LanguageIdentifier> = BUNDLES.keys().map(|s| s.parse().unwrap()).collect();
+    let available_locales: Vec<LanguageIdentifier> = bundles.keys().map(|s| s.parse().unwrap()).collect();
     let default_locale: LanguageIdentifier = DEFAULT_LOCALE.parse().unwrap();
 
     let negotiated = negotiate_languages(
@@ -109,8 +141,8 @@ fn get_bundle(locale: &str) -> Arc<ConcurrentFluentBundle> {
     );
 
     let chosen_locale = negotiated[0].to_string();
-    BUNDLES.get(&chosen_locale).cloned().unwrap_or_else(|| {
-        BUNDLES
+    bundles.get(&chosen_locale).cloned().unwrap_or_else(|| {
+        bundles
             .get(DEFAULT_LOCALE)
             .cloned()
             .expect("Default language bundle not found")
@@ -118,8 +150,8 @@ fn get_bundle(locale: &str) -> Arc<ConcurrentFluentBundle> {
 }
 
 pub mod macros {
-    // #[macro_export] // global macro
-    macro_rules! t {
+    #[macro_export] // global macro
+    macro_rules! __t {
         // Only key
       ($key:expr) => {
           $crate::i18n::I18n::t($key, None, None)
@@ -139,6 +171,11 @@ pub mod macros {
           $crate::i18n::I18n::t($key, Some(args), Some($locale))
       }};
     }
-    // use crate::i18n::macros::t;
-    pub(crate) use t;
+    // for: use crate::i18n::macros::t;
+    // pub(crate) use t;
+    pub use crate::__t as t;
 }
+
+// for: use jenkins::i18n::t;
+#[allow(unused_imports)]
+pub use self::macros::t;
