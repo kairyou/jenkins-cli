@@ -1,6 +1,6 @@
 [package]
 name = "jenkins"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2021"
 # crates.io
 authors = ["Kairyou"]
