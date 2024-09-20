@@ -1,7 +1,7 @@
 use colored::*;
 use std::env;
 
-use crate::t;
+use crate::i18n::macros::t;
 use crate::utils;
 
 /// Check if the current terminal is `mintty`

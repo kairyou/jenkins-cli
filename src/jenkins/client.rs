@@ -9,7 +9,7 @@ use tokio::sync::mpsc;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, AUTHORIZATION};
 
 // use super::{JenkinsJob, JenkinsResponse, JenkinsJobConfig, JenkinsJobParameter};
-use crate::t;
+use crate::i18n::macros::t;
 use crate::{
     jenkins::{self, Event, JenkinsJob, JenkinsJobParameter, JenkinsResponse},
     spinner,

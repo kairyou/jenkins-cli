@@ -22,6 +22,7 @@ mod spinner;
 mod utils;
 
 // use crate::i18n::I18n;
+use crate::i18n::macros::t;
 use crate::{
     config::{initialize_config, CONFIG},
     jenkins::{

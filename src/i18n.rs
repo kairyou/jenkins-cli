@@ -9,7 +9,7 @@ use std::sync::{Arc, RwLock};
 /// # Examples
 /// ```rust
 /// use jenkins::i18n::I18n;
-/// use jenkins::t;
+/// crate::i18n::macros::t;
 ///
 /// I18n::set_locale("zh-CN"); // Optional, set locale(default is system locale)
 /// println!("current locale: {}", I18n::locale());
@@ -117,25 +117,28 @@ fn get_bundle(locale: &str) -> Arc<ConcurrentFluentBundle> {
     })
 }
 
-#[macro_export]
-#[doc(hidden)]
-macro_rules! t {
-    // Only key
-    ($key:expr) => {
-        $crate::i18n::I18n::t($key, None, None)
-    };
-    // Key and locale
-    ($key:expr; $locale:expr) => {
-        $crate::i18n::I18n::t($key, None, Some($locale))
-    };
-    // Key and arguments
-    ($key:expr, $($arg_name:expr => $arg_value:expr),+) => {{
-        let args = &[$(($arg_name, $arg_value.into())),+];
-        $crate::i18n::I18n::t($key, Some(args), None)
-    }};
-    // Key, arguments, and locale
-    ($key:expr, $($arg_name:expr => $arg_value:expr),+ $(,)?; $locale:expr) => {{
-        let args = &[$(($arg_name, $arg_value.into())),+];
-        $crate::i18n::I18n::t($key, Some(args), Some($locale))
-    }};
+pub mod macros {
+    // #[macro_export] // global macro
+    macro_rules! t {
+        // Only key
+      ($key:expr) => {
+          $crate::i18n::I18n::t($key, None, None)
+      };
+      // Key and locale
+      ($key:expr; $locale:expr) => {
+          $crate::i18n::I18n::t($key, None, Some($locale))
+      };
+      // Key and arguments
+      ($key:expr, $($arg_name:expr => $arg_value:expr),+) => {{
+          let args = &[$(($arg_name, $arg_value.into())),+];
+          $crate::i18n::I18n::t($key, Some(args), None)
+      }};
+      // Key, arguments, and locale
+      ($key:expr, $($arg_name:expr => $arg_value:expr),+ $(,)?; $locale:expr) => {{
+          let args = &[$(($arg_name, $arg_value.into())),+];
+          $crate::i18n::I18n::t($key, Some(args), Some($locale))
+      }};
+    }
+    // use crate::i18n::macros::t;
+    pub(crate) use t;
 }

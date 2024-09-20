@@ -7,9 +7,10 @@ use std::fs;
 use tokio::sync::Mutex;
 
 use crate::env_checks::check_unsupported_terminal;
+use crate::i18n::macros::t;
 use crate::migrations::migrate_config_yaml_to_toml;
 use crate::models::{FileConfig, GlobalConfig, JenkinsConfig, RuntimeConfig};
-use crate::t;
+
 use crate::utils::clear_screen;
 
 pub const CONFIG_FILE: &str = ".jenkins.toml";
