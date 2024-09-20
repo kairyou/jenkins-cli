@@ -12,7 +12,7 @@ use crate::models::{FileConfig, GlobalConfig, JenkinsConfig, RuntimeConfig};
 use crate::t;
 use crate::utils::clear_screen;
 
-const CONFIG_FILE: &str = ".jenkins.toml";
+pub const CONFIG_FILE: &str = ".jenkins.toml";
 
 pub static CONFIG: Lazy<Mutex<RuntimeConfig>> = Lazy::new(|| {
     Mutex::new(RuntimeConfig {
@@ -74,7 +74,7 @@ fn load_config() -> Result<FileConfig, Box<dyn std::error::Error>> {
     let home_dir = home_dir().expect(&t!("get-home-dir-failed"));
     let config_path = home_dir.join(CONFIG_FILE);
     let _ = migrate_yaml_to_toml(&config_path);
-    let config_content = r#"[config]
+    let content = r#"[config]
 # language = "en-US"
 
 [[jenkins]]
@@ -93,12 +93,12 @@ token = ""
     // );
     // Create default configuration file
     if !config_path.exists() {
-        fs::write(&config_path, config_content).expect(&t!("write-default-config-failed"));
+        fs::write(&config_path, content).expect(&t!("write-default-config-failed"));
     }
 
     println!("{}: '{}'", t!("config-file"), config_path.display());
-    let config_content = fs::read_to_string(&config_path).expect(&t!("read-config-file-failed"));
-    let config = toml::from_str(&config_content).expect(&t!("parse-config-file-failed"));
+    let content = fs::read_to_string(&config_path).expect(&t!("read-config-file-failed"));
+    let config = toml::from_str(&content).expect(&t!("parse-config-file-failed"));
     Ok(config)
 }
 
@@ -114,12 +114,12 @@ fn migrate_yaml_to_toml(config_path: &PathBuf) -> Result<(), Box<dyn std::error:
             config: None,
             jenkins: config,
         };
-        let toml_content = format!(
+        let content = format!(
             "[config]\n# language = \"en-US\"\n\n{}",
             toml::to_string_pretty(&file_config)?
         );
-        // println!("{}", toml_content);
-        fs::write(config_path, toml_content)?;
+        // println!("{}", content);
+        fs::write(config_path, content)?;
         fs::rename(&yaml_path, yaml_path.with_extension("yaml.bak"))?;
     }
     Ok(())

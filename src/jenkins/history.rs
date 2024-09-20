@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 use crate::utils::current_timestamp;
 
-const HISTORY_FILE: &str = ".jenkins_history.toml";
+pub const HISTORY_FILE: &str = ".jenkins_history.toml";
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct HistoryEntry {
@@ -77,7 +77,7 @@ impl History {
             .context("Failed to read file content")?;
         // println!("load_history: {}", file_content);
 
-        let file_history: FileHistory = toml::from_str(&file_content).context("解析历史文件失败")?;
+        let file_history: FileHistory = toml::from_str(&file_content).context("Failed to parse history file")?;
         self.entries = file_history.entries;
         Ok(())
     }
@@ -90,9 +90,12 @@ impl History {
             .open(&self.file_path)
             .context("Failed to open history file for writing")?;
         let mut writer = BufWriter::new(file);
-        let toml_string = toml::to_string(&self.entries).context("Failed to serialize history")?;
+        let file_history = &FileHistory {
+            entries: self.entries.clone(),
+        };
+        let content = toml::to_string(file_history).context("Failed to serialize history")?;
         writer
-            .write_all(toml_string.as_bytes())
+            .write_all(content.as_bytes())
             .context("Failed to write history to file")?;
         Ok(())
     }
@@ -149,10 +152,10 @@ fn migrate_yaml_to_toml(config_path: &PathBuf) -> Result<()> {
         let yaml_content = fs::read_to_string(&yaml_path)?;
         let yaml_entries: Vec<HistoryEntry> = serde_yaml::from_str(&yaml_content)?;
         // println!("yaml_entries: {:?}", yaml_entries);
-        let history = FileHistory { entries: yaml_entries };
-        let toml_string = toml::to_string(&history)?;
-        // println!("{}", toml_string);
-        fs::write(config_path, toml_string)?;
+        let file_history = FileHistory { entries: yaml_entries };
+        let content = toml::to_string(&file_history)?;
+        // println!("{}", content);
+        fs::write(config_path, content)?;
         fs::remove_file(yaml_path)?;
     }
     Ok(())
