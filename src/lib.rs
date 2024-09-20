@@ -8,5 +8,9 @@ pub mod env_checks;
 pub mod i18n;
 pub mod jenkins;
 #[doc(hidden)]
+pub mod migrations;
+#[doc(hidden)]
+pub mod models;
+#[doc(hidden)]
 pub mod spinner;
 pub mod utils;

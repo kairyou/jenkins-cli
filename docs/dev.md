@@ -51,23 +51,6 @@ sudo apt install -y libssl-dev pkg-config
 # cargo add rust-embed # embed files to binary
 
 # cargo add --dev tempfile # For temp files/dirs in tests
-
-# test
-# cargo test -v --no-fail-fast
-# 静态分析, 检查潜在错误/性能问题/代码风格
-cargo clippy # --fix --allow-dirty
-cargo fmt -- --check # Check code formatting
-# cargo doc --no-deps # Generate documentation
-# python3 -m http.server 8000 -d ./target/doc/jenkins/ # Preview documentation
-# 分析二进制文件的大小
-# cargo bloat --release --crates # cargo install cargo-bloat
-
-# cargo install cargo-release
-cargo release patch --execute --no-publish # auto update version and push tag to remote
-
-# publish to cargo.io
-# cargo login
-cargo publish # publish to crates.io
 ```
 
 <!-- 
@@ -107,15 +90,32 @@ cargo build --target x86_64-unknown-linux-gnu --release # build for linux
 # export PATH="$PATH:/opt/osxcross/bin"; export CC=o64-clang; export CXX=o64-clang++;
 # cargo build --target x86_64-apple-darwin --release # build for intel mac
 # cargo build --target aarch64-apple-darwin --release # build for M1/M2 Mac
+
+# 分析二进制文件的大小
+# cargo bloat --release --crates # cargo install cargo-bloat
+
+# = Release
+cargo test -v --no-fail-fast # test
+cargo clippy # --fix --allow-dirty # Static code analysis - Check for potential errors/performance issues/code style
+cargo fmt -- --check # Check code formatting
+# cargo doc --no-deps # Generate documentation
+# python3 -m http.server 8000 -d ./target/doc/jenkins/ # Preview documentation
+
+# cargo install cargo-release
+cargo release patch --execute --no-publish # auto update version and push tag to remote
+# publish to cargo.io
+# cargo login
+cargo publish # publish to crates.io
 ```
 
 ### Test
 
 ```bash
-cargo test
+# cargo test
 cargo test --test test_git_branches -- --nocapture
 cargo test --test test_version_compare -- --nocapture
 cargo test --test test_jenkins_job_parameter -- --nocapture
+cargo test --test test_history -- --nocapture 
 ```
 
 #### FAQs

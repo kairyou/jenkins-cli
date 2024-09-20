@@ -16,6 +16,7 @@ mod config;
 mod env_checks;
 mod i18n;
 mod jenkins;
+mod migrations;
 mod models;
 mod spinner;
 mod utils;

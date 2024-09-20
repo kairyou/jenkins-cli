@@ -47,3 +47,6 @@ lto = true
 debug = false
 opt-level = "z"
 panic = "abort"
+
+[dev-dependencies]
+tempfile = "3.12.0"

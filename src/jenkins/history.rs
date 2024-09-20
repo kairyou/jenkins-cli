@@ -6,6 +6,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::PathBuf;
 
+use crate::migrations::migrate_history_yaml_to_toml;
 use crate::utils::current_timestamp;
 
 pub const HISTORY_FILE: &str = ".jenkins_history.toml";
@@ -22,14 +23,14 @@ pub struct HistoryEntry {
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct History {
-    entries: Vec<HistoryEntry>,
+    pub entries: Vec<HistoryEntry>,
     #[serde(skip)]
-    file_path: PathBuf,
+    pub file_path: PathBuf,
 }
 
 #[derive(Serialize, Deserialize)]
-struct FileHistory {
-    entries: Vec<HistoryEntry>,
+pub struct FileHistory {
+    pub entries: Vec<HistoryEntry>,
 }
 
 impl History {
@@ -43,7 +44,7 @@ impl History {
         let mut file_path = home_dir().ok_or_else(|| anyhow::anyhow!("Failed to get home directory"))?;
         file_path.push(HISTORY_FILE);
 
-        let _ = migrate_yaml_to_toml(&file_path);
+        let _ = migrate_history_yaml_to_toml(&file_path);
 
         // auto create history file
         if !file_path.exists() {
@@ -143,20 +144,4 @@ impl History {
             anyhow::bail!("Entry not found");
         }
     }
-}
-
-fn migrate_yaml_to_toml(config_path: &PathBuf) -> Result<()> {
-    let yaml_path = config_path.with_extension("yaml");
-    // println!("{}", yaml_path.display());
-    if yaml_path.exists() {
-        let yaml_content = fs::read_to_string(&yaml_path)?;
-        let yaml_entries: Vec<HistoryEntry> = serde_yaml::from_str(&yaml_content)?;
-        // println!("yaml_entries: {:?}", yaml_entries);
-        let file_history = FileHistory { entries: yaml_entries };
-        let content = toml::to_string(&file_history)?;
-        // println!("{}", content);
-        fs::write(config_path, content)?;
-        fs::remove_file(yaml_path)?;
-    }
-    Ok(())
 }

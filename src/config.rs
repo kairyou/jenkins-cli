@@ -4,10 +4,10 @@ use dialoguer::{theme::ColorfulTheme, FuzzySelect};
 use dirs::home_dir;
 use once_cell::sync::Lazy;
 use std::fs;
-use std::path::PathBuf;
 use tokio::sync::Mutex;
 
 use crate::env_checks::check_unsupported_terminal;
+use crate::migrations::migrate_config_yaml_to_toml;
 use crate::models::{FileConfig, GlobalConfig, JenkinsConfig, RuntimeConfig};
 use crate::t;
 use crate::utils::clear_screen;
@@ -73,7 +73,7 @@ pub async fn initialize_config() -> Result<()> {
 fn load_config() -> Result<FileConfig, Box<dyn std::error::Error>> {
     let home_dir = home_dir().expect(&t!("get-home-dir-failed"));
     let config_path = home_dir.join(CONFIG_FILE);
-    let _ = migrate_yaml_to_toml(&config_path);
+    let _ = migrate_config_yaml_to_toml(&config_path);
     let content = r#"[config]
 # language = "en-US"
 
@@ -83,7 +83,7 @@ url = ""
 user = ""
 token = ""
 # includes = ["*"]
-# excludes = ["*"]
+# excludes = []
 "#;
 
     // #[rustfmt::skip]
@@ -100,27 +100,4 @@ token = ""
     let content = fs::read_to_string(&config_path).expect(&t!("read-config-file-failed"));
     let config = toml::from_str(&content).expect(&t!("parse-config-file-failed"));
     Ok(config)
-}
-
-// patch for old config file
-fn migrate_yaml_to_toml(config_path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
-    let yaml_path = config_path.with_extension("yaml");
-    // println!("{}", yaml_path.display());
-    if yaml_path.exists() && !config_path.exists() {
-        let yml_content = fs::read_to_string(&yaml_path)?;
-        let config: Vec<JenkinsConfig> = serde_yaml::from_str(&yml_content)?;
-        // println!("{:?}", config);
-        let file_config = FileConfig {
-            config: None,
-            jenkins: config,
-        };
-        let content = format!(
-            "[config]\n# language = \"en-US\"\n\n{}",
-            toml::to_string_pretty(&file_config)?
-        );
-        // println!("{}", content);
-        fs::write(config_path, content)?;
-        fs::rename(&yaml_path, yaml_path.with_extension("yaml.bak"))?;
-    }
-    Ok(())
 }
