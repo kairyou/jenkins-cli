@@ -8,6 +8,7 @@ use tokio::sync::Mutex;
 
 use crate::env_checks::check_unsupported_terminal;
 use crate::i18n::macros::t;
+use crate::i18n::I18n;
 use crate::migrations::migrate_config_yaml_to_toml;
 use crate::models::{FileConfig, GlobalConfig, JenkinsConfig, RuntimeConfig};
 
@@ -27,7 +28,11 @@ pub async fn initialize_config() -> Result<()> {
     let cfg = load_config().expect(&t!("load-config-failed"));
     let global = cfg.config;
     let jenkins = cfg.jenkins;
-    // if let Some(global) = &global { println!("language: {:?}", global.language); }
+
+    if let Some(global_config) = &global {
+        // println!("language: {:?}", global.locale);
+        apply_global_settings(global_config);
+    }
 
     if jenkins.is_empty()
         || jenkins
@@ -70,13 +75,25 @@ pub async fn initialize_config() -> Result<()> {
     Ok(())
 }
 
+/// Apply global settings from the global configuration
+fn apply_global_settings(global_config: &GlobalConfig) {
+    // println!("global_settings: {:?}", global_config);
+    // 应用语言设置
+    if let Some(locale) = &global_config.locale {
+        I18n::set_locale(locale);
+    }
+    // if let Some(log_level) = &global_config.log_level {
+    //     set_log_level(log_level);
+    // }
+}
+
 /// Load or create the Jenkins configuration file
 fn load_config() -> Result<FileConfig, Box<dyn std::error::Error>> {
     let home_dir = home_dir().expect(&t!("get-home-dir-failed"));
     let config_path = home_dir.join(CONFIG_FILE);
     let _ = migrate_config_yaml_to_toml(&config_path);
     let content = r#"[config]
-# language = "en-US"
+# locale = "en-US"
 
 [[jenkins]]
 name = ""

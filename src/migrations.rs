@@ -15,7 +15,7 @@ pub fn migrate_config_yaml_to_toml(config_path: &PathBuf) -> Result<()> {
             jenkins: config,
         };
         let content = format!(
-            "[config]\n# language = \"en-US\"\n\n{}",
+            "[config]\n# locale = \"en-US\"\n\n{}",
             toml::to_string_pretty(&file_config)?
         );
         fs::write(config_path, content)?;

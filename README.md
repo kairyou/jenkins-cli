@@ -58,7 +58,7 @@ Create a file named `.jenkins.toml` in your home directory with the following co
 ```toml
 # $HOME/.jenkins.toml
 [config]
-# language = "en-US" # (optional), e.g. zh-CN, en-US
+# locale = "en-US" # (optional), e.g. zh-CN, en-US
 
 [[jenkins]]
 name = "SIT"

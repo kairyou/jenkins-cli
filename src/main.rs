@@ -43,8 +43,6 @@ static LOADING: Lazy<std::sync::Arc<Mutex<bool>>> = Lazy::new(|| std::sync::Arc:
 
 #[tokio::main]
 async fn main() {
-    // I18n::set_locale("zh-CN");
-
     let matches = Command::new("jenkins")
         .version(env!("CARGO_PKG_VERSION"))
         // .author("Your Name <your.email@example.com>")

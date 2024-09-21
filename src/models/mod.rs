@@ -10,7 +10,7 @@ pub struct FileConfig {
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct GlobalConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub language: Option<String>,
+    pub locale: Option<String>, // display language
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub record_history: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -33,6 +33,7 @@ pub struct JenkinsConfig {
     pub excludes: Vec<String>,
 }
 
+#[derive(Debug)]
 pub struct RuntimeConfig {
     #[allow(dead_code)]
     pub global: Option<GlobalConfig>,

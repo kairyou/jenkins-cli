@@ -58,7 +58,7 @@ jenkins
 ```toml
 # $HOME/.jenkins.toml
 [config]
-# language = "en-US" # (optional), e.g. zh-CN, en-US
+# locale = "en-US" # (可选), e.g. zh-CN, en-US
 
 [[jenkins]]
 name = "SIT"
