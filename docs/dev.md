@@ -20,7 +20,9 @@ sudo apt install -y libssl-dev pkg-config
 
 ```bash
 # cargo init # create new project
+
 # Dependencies
+# cargo tree -i openssl-sys # dependency tree
 # cargo add clap --features derive # clap = { version = "4.0", features = ["derive"] }
 
 # cargo add serde --features derive # 序列化/反序列化

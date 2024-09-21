@@ -46,9 +46,20 @@ pub const DEFAULT_LOCALE: &str = "en-US";
 /// Get the system locale
 pub fn get_system_locale() -> String {
     sys_locale::get_locale()
+        .map(|locale| normalize_locale(&locale))
         .unwrap_or_else(|| DEFAULT_LOCALE.to_string())
-        .replace("_", "-") // "zh_CN" => "zh-CN"
 }
+
+/// Normalize the locale string
+/// - Returns the default locale "en-US" if input is "C" or "POSIX"
+/// - Replaces underscores with hyphens, e.g., "zh_CN" => "zh-CN"
+fn normalize_locale(locale: &str) -> String {
+    match locale {
+        "C" | "POSIX" => DEFAULT_LOCALE.to_string(),
+        _ => locale.replace('_', "-"),
+    }
+}
+
 static CURRENT_LOCALE: Lazy<RwLock<String>> = Lazy::new(|| RwLock::new(get_system_locale()));
 
 pub struct I18n;
@@ -56,8 +67,9 @@ pub struct I18n;
 impl I18n {
     #[allow(dead_code)]
     pub fn set_locale(locale: &str) {
+        let normalized_locale = normalize_locale(locale);
         let mut current_locale = CURRENT_LOCALE.write().unwrap();
-        *current_locale = locale.to_string();
+        *current_locale = normalized_locale;
     }
 
     #[allow(dead_code)]
