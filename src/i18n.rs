@@ -9,7 +9,7 @@ use std::sync::{Arc, RwLock};
 /// # Examples
 /// ```rust
 /// use jenkins::i18n::I18n;
-/// crate::i18n::macros::t;
+/// use jenkins::i18n::t;
 ///
 /// I18n::set_locale("zh-CN"); // Optional, set locale(default is system locale)
 /// println!("current locale: {}", I18n::locale());
