@@ -58,7 +58,7 @@ jenkins
 ```toml
 # $HOME/.jenkins.toml
 [config]
-# locale = "en-US" # (可选), e.g. zh-CN, en-US
+# locale = "en-US" # (可选), 默认自动检测，例如 zh-CN, en-US
 
 [[jenkins]]
 name = "SIT"
@@ -79,12 +79,15 @@ token = "your-api-token"
 
 ### 配置选项
 
-- `name`: 环境名称 (e.g., "SIT", "UAT"，"PROD")
-- `url`: Jenkins 服务器地址
-- `user`: 你的 Jenkins User ID
-- `token`: 你的 Jenkins API token
-- `includes`: 包含项目的字符串或正则表达式列表 (可选)
-- `excludes`: 排除项目的字符串或正则表达式列表 (可选)
+- `config`: 全局配置部分
+  - `locale`: 设置语言 (可选), 默认自动检测，例如 "zh-CN", "en-US"
+- `jenkins`: 环境配置部分 (支持多环境)
+  - `name`: 环境名称 (例如 "SIT", "UAT", "PROD")
+  - `url`: Jenkins 服务器地址
+  - `user`: 你的 Jenkins User ID
+  - `token`: 你的 Jenkins API token
+  - `includes`: 包含项目的字符串或正则表达式列表 (可选)
+  - `excludes`: 排除项目的字符串或正则表达式列表 (可选)
 
 ### 项目过滤
 

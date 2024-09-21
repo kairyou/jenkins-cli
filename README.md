@@ -58,7 +58,7 @@ Create a file named `.jenkins.toml` in your home directory with the following co
 ```toml
 # $HOME/.jenkins.toml
 [config]
-# locale = "en-US" # (optional), e.g. zh-CN, en-US
+# locale = "en-US" # (optional), default auto detect, e.g. zh-CN, en-US
 
 [[jenkins]]
 name = "SIT"
@@ -79,12 +79,15 @@ token = "your-api-token"
 
 ### Configuration Options
 
-- `name`: Environment name (e.g., "SIT", "UAT"，"PROD")
-- `url`: Jenkins server URL
-- `user`: Your Jenkins user ID
-- `token`: Your Jenkins API token
-- `includes`: List of strings or regex patterns to include projects (optional)
-- `excludes`: List of strings or regex patterns to exclude projects (optional)
+- `config`: Global configuration section
+  - `locale`: Set language (optional), default auto detect, e.g. "zh-CN", "en-US"
+- `jenkins`: Environment configuration section (supports multiple environments)
+  - `name`: Environment name (e.g., "SIT", "UAT", "PROD")
+  - `url`: Jenkins server URL
+  - `user`: Your Jenkins user ID
+  - `token`: Your Jenkins API token
+  - `includes`: List of strings or regex patterns to include projects (optional)
+  - `excludes`: List of strings or regex patterns to exclude projects (optional)
 
 ### Project Filtering
 
