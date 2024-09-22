@@ -23,7 +23,6 @@ dialoguer = { version = "0.11.0", features = ["fuzzy-select"] }
 dirs = "5.0.1"
 fluent = "0.16.1"
 fluent-langneg = "0.14.1"
-include_dir = "0.7.4"
 indicatif = "0.17.8"
 libc = "0.2.158"
 once_cell = "1.19.0"
