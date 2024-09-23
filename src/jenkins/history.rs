@@ -69,7 +69,7 @@ impl History {
         // If the file is empty
         if metadata.len() == 0 {
             println!("history file is empty");
-            *self = Self::default(); // self.entries = vec![];
+            self.entries = vec![]; // *self = Self::default();
             return Ok(());
         }
         let mut content = String::new();
@@ -86,13 +86,14 @@ impl History {
             Err(_e) => {
                 // println!("Failed to parse history file: {}", _e);
                 // Err(anyhow::anyhow!("Failed to parse history file"))
-                *self = Self::default();
+                self.entries = vec![];
                 Ok(())
             }
         }
     }
 
     fn save_history(&self) -> Result<()> {
+        // println!("save_history: {:?}, {:?}", self.entries, self.file_path);
         let file = OpenOptions::new()
             .create(true)
             .write(true)
@@ -111,6 +112,7 @@ impl History {
     }
 
     pub fn upsert_history(&mut self, entry: &mut HistoryEntry) -> Result<()> {
+        // println!("upsert_history: {:?}", entry);
         entry.created_at = Some(current_timestamp());
         if let Some(existing_entry) = self.entries.iter_mut().find(|e| Self::matches_entry(e, entry)) {
             *existing_entry = entry.clone();
