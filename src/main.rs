@@ -203,7 +203,7 @@ async fn menu() {
     let job = projects.get(selection).expect(&t!("get-project-failed"));
 
     // println!("Selected project: {}", job.display_name.cyan().bold());
-    let job_url = format!("{}/job/{}", jenkins_config.url, job.name);
+    let job_url = format_url(&format!("{}/job/{}", jenkins_config.url, job.name));
     // println!("{}", job_url.underline().blue());
 
     // Get build history
