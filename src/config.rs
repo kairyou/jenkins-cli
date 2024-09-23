@@ -116,6 +116,13 @@ token = ""
 
     println!("{}: '{}'", t!("config-file"), config_path.display());
     let content = fs::read_to_string(&config_path).expect(&t!("read-config-file-failed"));
-    let config = toml::from_str(&content).expect(&t!("parse-config-file-failed"));
-    Ok(config)
+    // let config = toml::from_str(&content).expect(&t!("parse-config-file-failed"));
+    match toml::from_str::<FileConfig>(content.trim()) {
+        Ok(config) => Ok(config),
+        Err(_e) => {
+            // println!("Failed to parse config file: {}", _e);
+            // Err(anyhow::anyhow!(t!("parse-config-file-failed")).into())
+            Ok(FileConfig::default())
+        }
+    }
 }

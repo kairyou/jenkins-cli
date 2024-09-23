@@ -7,7 +7,7 @@ fn setup_test_history() -> (History, tempfile::TempDir) {
     let temp_dir = tempdir().unwrap();
     let file_path = temp_dir.path().join(HISTORY_FILE);
     let history = History {
-        entries: Vec::new(),
+        entries: vec![],
         file_path,
     };
     (history, temp_dir)
