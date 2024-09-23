@@ -68,9 +68,9 @@ fn extract_text(e: quick_xml::events::BytesText) -> String {
 pub fn parse_jenkins_job_parameter(xml_data: &str) -> Vec<JenkinsJobParameter> {
     use quick_xml::events::Event;
     let mut reader = quick_xml::Reader::from_reader(BufReader::new(xml_data.as_bytes()));
-    let mut buf = Vec::new();
+    let mut buf = vec![];
 
-    let mut parameters = Vec::new();
+    let mut parameters = vec![];
     let mut current_param = JenkinsJobParameter {
         param_type: None,
         name: String::new(),
@@ -85,7 +85,7 @@ pub fn parse_jenkins_job_parameter(xml_data: &str) -> Vec<JenkinsJobParameter> {
     };
 
     let mut inside_choices = false;
-    let mut choices = Vec::new();
+    let mut choices = vec![];
 
     loop {
         match reader.read_event_into(&mut buf) {

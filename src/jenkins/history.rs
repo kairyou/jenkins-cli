@@ -53,7 +53,7 @@ impl History {
         }
         // println!("history_file: {:?}", file_path);
         let mut history = Self {
-            entries: Vec::new(),
+            entries: vec![],
             file_path,
         };
         history.load_history()?;
@@ -68,19 +68,28 @@ impl History {
 
         // If the file is empty
         if metadata.len() == 0 {
-            self.entries = Vec::new();
+            println!("history file is empty");
+            *self = Self::default(); // self.entries = vec![];
             return Ok(());
         }
-        let mut file_content = String::new();
+        let mut content = String::new();
         let mut reader = BufReader::new(file);
         reader
-            .read_to_string(&mut file_content)
+            .read_to_string(&mut content)
             .context("Failed to read file content")?;
-        // println!("load_history: {}", file_content);
-
-        let file_history: FileHistory = toml::from_str(&file_content).context("Failed to parse history file")?;
-        self.entries = file_history.entries;
-        Ok(())
+        // println!("load_history: {}", content);
+        match toml::from_str::<FileHistory>(content.trim()) {
+            Ok(file_history) => {
+                self.entries = file_history.entries;
+                Ok(())
+            }
+            Err(_e) => {
+                // println!("Failed to parse history file: {}", _e);
+                // Err(anyhow::anyhow!("Failed to parse history file"))
+                *self = Self::default();
+                Ok(())
+            }
+        }
     }
 
     fn save_history(&self) -> Result<()> {
