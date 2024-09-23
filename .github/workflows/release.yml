@@ -105,6 +105,12 @@ jobs:
           merge-multiple: true
       - name: List artifacts
         run: find artifacts -type f
+      - name: Delete existing release
+        uses: dev-drprasad/delete-tag-and-release@v1.1
+        with:
+          tag_name: ${{ github.ref_name }}
+          delete_release: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Create Release
         uses: softprops/action-gh-release@v1
         env:

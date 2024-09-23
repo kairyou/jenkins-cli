@@ -14,6 +14,10 @@ A powerful and efficient Jenkins CLI tool written in Rust. Simplifies deployment
 - Real-time console output during job execution
 - High performance, guaranteed by Rust language
 
+### Demo
+
+![Demo](./assets/demo.gif)
+
 ## Installation
 
 To install the Jenkins CLI tool, use one of the following methods:
