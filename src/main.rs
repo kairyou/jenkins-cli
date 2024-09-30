@@ -144,7 +144,7 @@ async fn menu() {
     // println!("config.url: {}", config.url); // client.read().await.base_url
     let mut history = History::new().unwrap();
     let enable_history = jenkins_config.enable_history.unwrap_or(true);
-    println!("enable_history: {}", enable_history);
+    // println!("enable_history: {}", enable_history);
 
     // Spawn a task to listen for Ctrl+C
     let _ctrl_c_handler = {
