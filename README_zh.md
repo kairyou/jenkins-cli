@@ -63,6 +63,7 @@ jenkins
 # $HOME/.jenkins.toml
 [config]
 # locale = "en-US" # (可选), 默认自动检测，例如 zh-CN, en-US
+# enable_history = false # (可选), 默认 true
 
 [[jenkins]]
 name = "SIT"
@@ -85,6 +86,7 @@ token = "your-api-token"
 
 - `config`: 全局配置部分
   - `locale`: 设置语言 (可选), 默认自动检测，例如 "zh-CN", "en-US"
+  - `enable_history`: 记录上次的构建参数 (可选), 默认 true, 设置为 false 以禁用
 - `jenkins`: 环境配置部分 (支持多环境)
   - `name`: 环境名称 (例如 "SIT", "UAT", "PROD")
   - `url`: Jenkins 服务器地址
@@ -92,6 +94,7 @@ token = "your-api-token"
   - `token`: 你的 Jenkins API token
   - `includes`: 包含项目的字符串或正则表达式列表 (可选)
   - `excludes`: 排除项目的字符串或正则表达式列表 (可选)
+  - `enable_history`: 记录上次的构建参数 (可选), 设置后覆盖全局设置
 
 ### 项目过滤
 

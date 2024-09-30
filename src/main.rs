@@ -143,6 +143,8 @@ async fn menu() {
     let client = std::sync::Arc::new(tokio::sync::RwLock::new(JenkinsClient::new(&jenkins_config.url, &auth)));
     // println!("config.url: {}", config.url); // client.read().await.base_url
     let mut history = History::new().unwrap();
+    let enable_history = jenkins_config.enable_history.unwrap_or(true);
+    println!("enable_history: {}", enable_history);
 
     // Spawn a task to listen for Ctrl+C
     let _ctrl_c_handler = {
@@ -265,16 +267,18 @@ async fn menu() {
     // println!("user_params: {:?}", user_params);
     // std::process::exit(1); // debug params
 
-    let mut history_param = HistoryEntry {
-        job_url: job_url.clone(),
-        name: job.name.clone(),
-        display_name: Some(job.display_name.clone()),
-        user_params: Some(user_params.clone()),
-        created_at: Some(0),
-        completed_at: Some(0),
-    };
-    if let Err(e) = history.upsert_history(&mut history_param) {
-        eprintln!("{}", t!("update-history-failed", "error" => e.to_string()));
+    if enable_history {
+        let mut history_param = HistoryEntry {
+            job_url: job_url.clone(),
+            name: job.name.clone(),
+            display_name: Some(job.display_name.clone()),
+            user_params: Some(user_params.clone()),
+            created_at: Some(0),
+            completed_at: Some(0),
+        };
+        if let Err(e) = history.upsert_history(&mut history_param) {
+            eprintln!("{}", t!("update-history-failed", "error" => e.to_string()));
+        }
     }
 
     let queue_location = {
@@ -313,17 +317,19 @@ async fn menu() {
             *LOADING.lock().await = false;
             // stop loop
             CTRL_C_HANDLED.store(true, atomic::Ordering::SeqCst);
-            if let Err(e) = history.update_field(
-                &HistoryEntry {
-                    name: job.name.clone(),
-                    job_url: job_url.clone(),
-                    ..Default::default()
-                },
-                |entry| {
-                    entry.completed_at = Some(current_timestamp());
-                },
-            ) {
-                eprintln!("Failed to update completed_at: {}", e);
+            if enable_history {
+                if let Err(e) = history.update_field(
+                    &HistoryEntry {
+                        name: job.name.clone(),
+                        job_url: job_url.clone(),
+                        ..Default::default()
+                    },
+                    |entry| {
+                        entry.completed_at = Some(current_timestamp());
+                    },
+                ) {
+                    eprintln!("Failed to update completed_at: {}", e);
+                }
             }
         }
         Err(e) => {

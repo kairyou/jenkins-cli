@@ -35,6 +35,7 @@ impl JenkinsClient {
     /// A `Result` containing the headers or an `anyhow::Error` if the headers cannot be built.
     fn build_headers(&self, extra_headers: Option<HashMap<String, String>>) -> Result<HeaderMap, anyhow::Error> {
         let mut headers = HeaderMap::new();
+        // client.basic_auth(self.username.clone(), Some(self.token.clone()))
         headers.insert(
             AUTHORIZATION,
             HeaderValue::from_str(&self.authorization).map_err(|e| anyhow!(e.to_string()))?,

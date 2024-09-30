@@ -24,18 +24,22 @@ pub static CONFIG: Lazy<Mutex<RuntimeConfig>> = Lazy::new(|| {
 });
 
 // let (global_config, jenkins_config) = CONFIG.lock().await;
-pub async fn initialize_config() -> Result<()> {
+pub async fn initialize_config() -> Result<(), Box<dyn std::error::Error>> {
     let cfg = load_config().expect(&t!("load-config-failed"));
-    let global = cfg.config;
-    let jenkins = cfg.jenkins;
+    let global_config = cfg.config;
+    let jenkins_config = cfg.jenkins;
 
-    if let Some(global_config) = &global {
-        // println!("language: {:?}", global.locale);
-        apply_global_settings(global_config);
-    }
+    let (global_config, global_enable_history) = match &global_config {
+        Some(config) => {
+            // println!("language: {:?}", global.locale);
+            apply_global_settings(config);
+            (Some(config.clone()), config.enable_history.unwrap_or(true))
+        }
+        None => (None, true),
+    };
 
-    if jenkins.is_empty()
-        || jenkins
+    if jenkins_config.is_empty()
+        || jenkins_config
             .iter()
             .any(|c| c.url.is_empty() || c.user.is_empty() || c.token.is_empty())
     {
@@ -44,8 +48,8 @@ pub async fn initialize_config() -> Result<()> {
         std::process::exit(1);
     }
 
-    let selected_config = if jenkins.len() > 1 {
-        let env_names: Vec<String> = jenkins.iter().map(|c| c.name.clone()).collect();
+    let selected_config = if jenkins_config.len() > 1 {
+        let env_names: Vec<String> = jenkins_config.iter().map(|c| c.name.clone()).collect();
         let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
             .with_prompt(t!("select-jenkins-env"))
             .items(&env_names)
@@ -62,14 +66,19 @@ pub async fn initialize_config() -> Result<()> {
                 eprintln!("{}: {}", t!("select-jenkins-env-failed"), e);
                 std::process::exit(1);
             });
-        jenkins[selection].clone()
+        jenkins_config[selection].clone()
     } else {
-        jenkins[0].clone()
+        jenkins_config[0].clone()
     };
+    let enable_history = selected_config.enable_history.unwrap_or(global_enable_history);
+
     let mut config = CONFIG.lock().await;
     *config = RuntimeConfig {
-        global: global.clone(),
-        jenkins: selected_config,
+        global: global_config,
+        jenkins: JenkinsConfig {
+            enable_history: Some(enable_history),
+            ..selected_config
+        },
     };
 
     Ok(())

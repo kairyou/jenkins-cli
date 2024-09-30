@@ -68,7 +68,7 @@ impl History {
 
         // If the file is empty
         if metadata.len() == 0 {
-            println!("history file is empty");
+            // println!("history file is empty");
             self.entries = vec![]; // *self = Self::default();
             return Ok(());
         }

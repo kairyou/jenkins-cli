@@ -13,7 +13,7 @@ pub struct GlobalConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub locale: Option<String>, // display language
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub record_history: Option<bool>,
+    pub enable_history: Option<bool>, // enable history recording(build parameters)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub log_level: Option<String>,
 }
@@ -32,6 +32,8 @@ pub struct JenkinsConfig {
     pub includes: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub excludes: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enable_history: Option<bool>, // override global setting
 }
 
 #[derive(Debug)]

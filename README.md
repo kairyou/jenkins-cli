@@ -63,6 +63,7 @@ Create a file named `.jenkins.toml` in your home directory with the following co
 # $HOME/.jenkins.toml
 [config]
 # locale = "en-US" # (optional), default auto detect, e.g. zh-CN, en-US
+# enable_history = false # (optional), default true
 
 [[jenkins]]
 name = "SIT"
@@ -85,6 +86,7 @@ token = "your-api-token"
 
 - `config`: Global configuration section
   - `locale`: Set language (optional), default auto detect, e.g. "zh-CN", "en-US"
+  - `enable_history`: Remember last build parameters (optional), default true, set to false to disable
 - `jenkins`: Environment configuration section (supports multiple environments)
   - `name`: Environment name (e.g., "SIT", "UAT", "PROD")
   - `url`: Jenkins server URL
@@ -92,6 +94,7 @@ token = "your-api-token"
   - `token`: Your Jenkins API token
   - `includes`: List of strings or regex patterns to include projects (optional)
   - `excludes`: List of strings or regex patterns to exclude projects (optional)
+  - `enable_history`: Remember build parameters (optional), overrides global setting if specified
 
 ### Project Filtering
 
