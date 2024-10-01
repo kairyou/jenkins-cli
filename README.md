@@ -6,13 +6,12 @@ A powerful and efficient Jenkins CLI tool written in Rust. Simplifies deployment
 
 ## Features
 
-- Rapid deployment of Jenkins jobs
-- Intuitive command-line interface
-- Support for multiple Jenkins environments
-- Project filtering capabilities
-- Support for common Jenkins operations (e.g., triggering builds)
-- Real-time console output during job execution
-- High performance, guaranteed by Rust language
+- Fast and efficient Jenkins job deployment
+- Intuitive command-line interface with real-time console output
+- Multi-environment support with project filtering capabilities
+- Common Jenkins operations support (e.g., triggering builds)
+- High performance and cross-platform compatibility (Mac, Windows, Linux)
+- Remembers last build parameters for quick re-runs
 
 ### Demo
 
