@@ -24,18 +24,18 @@ pub static CONFIG: Lazy<Mutex<RuntimeConfig>> = Lazy::new(|| {
 });
 
 // let (global_config, jenkins_config) = CONFIG.lock().await;
-pub async fn initialize_config() -> Result<(), Box<dyn std::error::Error>> {
+pub async fn initialize_config() -> Result<()> {
     let cfg = load_config().expect(&t!("load-config-failed"));
     let global_config = cfg.config;
     let jenkins_config = cfg.jenkins;
 
-    let (global_config, global_enable_history) = match &global_config {
+    let global_enable_history = match &global_config {
         Some(config) => {
             // println!("language: {:?}", global.locale);
             apply_global_settings(config);
-            (Some(config.clone()), config.enable_history.unwrap_or(true))
+            config.enable_history.unwrap_or(true)
         }
-        None => (None, true),
+        None => true,
     };
 
     if jenkins_config.is_empty()
@@ -87,7 +87,6 @@ pub async fn initialize_config() -> Result<(), Box<dyn std::error::Error>> {
 /// Apply global settings from the global configuration
 fn apply_global_settings(global_config: &GlobalConfig) {
     // println!("global_settings: {:?}", global_config);
-    // 应用语言设置
     if let Some(locale) = &global_config.locale {
         I18n::set_locale(locale);
     }
