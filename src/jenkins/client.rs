@@ -63,14 +63,22 @@ impl JenkinsClient {
     async fn handle_response(&self, result: Result<reqwest::Response, reqwest::Error>) -> Result<reqwest::Response> {
         match result {
             Ok(response) => {
-                if response.status() == reqwest::StatusCode::UNAUTHORIZED {
-                    eprintln!("Error: Unauthorized (401). Please check your credentials.");
-                    return Err(anyhow::anyhow!("Unauthorized (401): {}", response.status()));
-                }
-                if !response.status().is_success() {
-                    // not 2xx
-                    eprintln!("Error: HTTP request failed with status code {}", response.status());
-                    return Err(anyhow::anyhow!("HTTP request failed: {}", response.status()));
+                let status = response.status();
+                if !status.is_success() {
+                  let url = response.url().to_string();
+                  let error_message = match status {
+                      reqwest::StatusCode::UNAUTHORIZED => "Unauthorized (401): Please check your credentials.",
+                      reqwest::StatusCode::FORBIDDEN => "Forbidden (403): You may not have sufficient permissions.",
+                      reqwest::StatusCode::NOT_FOUND => "Not Found (404): The requested resource does not exist.",
+                      _ => "Request failed",
+                  };
+              
+                  eprintln!("Error: {}", error_message.red());
+                  eprintln!("URL: {}", url);
+                  // eprintln!("Response headers: {:?}", response.headers().clone());
+                  // eprintln!("Response body: {}", response.text().await?);
+
+                  return Err(anyhow::anyhow!("{} Status code: {}", error_message, status));
                 }
                 Ok(response)
             }
@@ -130,7 +138,7 @@ impl JenkinsClient {
             self.base_url
         ));
         let headers = self.build_headers(None)?;
-        // println!("{}, {:?}", url, headers);
+        // println!("{}, headers: {:?}", url, headers.clone());
         let result = self.client.get(&url).headers(headers).send().await;
         // println!("{:?}", response);
         let response = self.handle_response(result).await?;
@@ -337,9 +345,9 @@ impl JenkinsClient {
         // Triggering with format!("{}/build?delay=0sec", job_url) doesn't use a queue
         let url = format_url(&format!("{}/buildWithParameters", job_url));
         let headers = self.build_headers(None)?;
+        // println!("{}, headers: {:?}, params: {:?}", url, headers.clone(), parameters);
         let result = self.client.post(&url).headers(headers).form(&parameters).send().await;
         let response = self.handle_response(result).await?;
-        // println!("params: {:?}", parameters);
         // queue URL, e.g. http://jenkins_url/queue/item/1/
         let queue_location = response
             .headers()
