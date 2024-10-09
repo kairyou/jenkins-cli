@@ -65,20 +65,20 @@ impl JenkinsClient {
             Ok(response) => {
                 let status = response.status();
                 if !status.is_success() {
-                  let url = response.url().to_string();
-                  let error_message = match status {
-                      reqwest::StatusCode::UNAUTHORIZED => "Unauthorized (401): Please check your credentials.",
-                      reqwest::StatusCode::FORBIDDEN => "Forbidden (403): You may not have sufficient permissions.",
-                      reqwest::StatusCode::NOT_FOUND => "Not Found (404): The requested resource does not exist.",
-                      _ => "Request failed",
-                  };
-              
-                  eprintln!("Error: {}", error_message.red());
-                  eprintln!("URL: {}", url);
-                  // eprintln!("Response headers: {:?}", response.headers().clone());
-                  // eprintln!("Response body: {}", response.text().await?);
+                    let url = response.url().to_string();
+                    let error_message = match status {
+                        reqwest::StatusCode::UNAUTHORIZED => "Unauthorized (401): Please check your credentials.",
+                        reqwest::StatusCode::FORBIDDEN => "Forbidden (403): You may not have sufficient permissions.",
+                        reqwest::StatusCode::NOT_FOUND => "Not Found (404): The requested resource does not exist.",
+                        _ => "Request failed",
+                    };
 
-                  return Err(anyhow::anyhow!("{} Status code: {}", error_message, status));
+                    eprintln!("Error: {}", error_message.red());
+                    eprintln!("URL: {}", url);
+                    // eprintln!("Response headers: {:?}", response.headers().clone());
+                    // eprintln!("Response body: {}", response.text().await?);
+
+                    return Err(anyhow::anyhow!("{} Status code: {}", error_message, status));
                 }
                 Ok(response)
             }
