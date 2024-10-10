@@ -1,7 +1,10 @@
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::io::BufReader;
 
+use crate::constants::{ParamType, DEFAULT_PARAM_VALUE};
 pub mod client;
 #[doc(hidden)]
 pub mod history;
@@ -10,6 +13,17 @@ pub mod history;
 #[doc(hidden)]
 pub enum Event {
     StopSpinner,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ParamInfo {
+    pub value: String,
+    #[serde(default = "default_param_type")]
+    pub r#type: ParamType, // param_type
+}
+
+fn default_param_type() -> ParamType {
+    ParamType::String
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -28,16 +42,16 @@ struct JenkinsResponse {
 // job config
 #[derive(Debug)]
 pub struct JenkinsJobParameter {
-    pub param_type: Option<String>, // parameter type (string, text, choice, boolean, password)
-    pub name: String,               // parameter name
-    pub description: Option<String>, // parameter description
+    pub param_type: Option<ParamType>, // ParamType string, text, choice, boolean, password
+    pub name: String,                  // parameter name
+    pub description: Option<String>,   // parameter description
     pub default_value: Option<String>, // default value
-    pub choices: Option<Vec<String>>, // choices for select type
-    pub trim: Option<bool>,         // trim string
-    pub required: Option<bool>,     // CredentialsParameterDefinition
+    pub choices: Option<Vec<String>>,  // choices for select type
+    pub trim: Option<bool>,            // trim string
+    pub required: Option<bool>,        // CredentialsParameterDefinition
     pub credential_type: Option<String>, // CredentialsParameterDefinition
-    pub project_name: Option<String>, // RunParameterDefinition
-    pub filter: Option<String>,     // RunParameterDefinition
+    pub project_name: Option<String>,  // RunParameterDefinition
+    pub filter: Option<String>,        // RunParameterDefinition
 }
 
 // impl JenkinsJobParameter {
@@ -47,17 +61,19 @@ pub struct JenkinsJobParameter {
 //     }
 // }
 
-const SUPPORTED_PARAMETER_DEFINITIONS: &[&[u8]] = &[
-    b"hudson.model.StringParameterDefinition",
-    b"hudson.model.TextParameterDefinition",
-    b"hudson.model.ChoiceParameterDefinition",
-    b"hudson.model.BooleanParameterDefinition",
-    b"hudson.model.PasswordParameterDefinition",
-    // not supported
-    // b"hudson.model.FileParameterDefinition"
-    // b"com.cloudbees.plugins.credentials.CredentialsParameterDefinition"
-    // b"hudson.model.RunParameterDefinition"
-];
+static PARAMETER_DEFINITIONS: Lazy<HashMap<&'static [u8], ParamType>> = Lazy::new(|| {
+    HashMap::from([
+        (b"hudson.model.StringParameterDefinition" as &[u8], ParamType::String),
+        (b"hudson.model.TextParameterDefinition", ParamType::Text),
+        (b"hudson.model.ChoiceParameterDefinition", ParamType::Choice),
+        (b"hudson.model.BooleanParameterDefinition", ParamType::Boolean),
+        (b"hudson.model.PasswordParameterDefinition", ParamType::Password),
+        // not supported
+        // b"hudson.model.FileParameterDefinition"
+        // b"com.cloudbees.plugins.credentials.CredentialsParameterDefinition"
+        // b"hudson.model.RunParameterDefinition"
+    ])
+});
 
 /// extract text from xml
 fn extract_text(e: quick_xml::events::BytesText) -> String {
@@ -90,15 +106,8 @@ pub fn parse_jenkins_job_parameter(xml_data: &str) -> Vec<JenkinsJobParameter> {
     loop {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref e)) => match e.name().as_ref() {
-                val if SUPPORTED_PARAMETER_DEFINITIONS.contains(&val) => {
-                    let full_type = String::from_utf8_lossy(e.name().as_ref()).to_string();
-                    let short_type = full_type
-                        .split('.')
-                        .last()
-                        .unwrap_or(&full_type)
-                        .replace("ParameterDefinition", "")
-                        .to_lowercase();
-                    current_param.param_type = Some(short_type);
+                val if PARAMETER_DEFINITIONS.contains_key(val) => {
+                    current_param.param_type = Some(PARAMETER_DEFINITIONS[val].clone());
                 }
                 b"name" => {
                     if let Ok(Event::Text(e)) = reader.read_event_into(&mut buf) {
@@ -114,8 +123,8 @@ pub fn parse_jenkins_job_parameter(xml_data: &str) -> Vec<JenkinsJobParameter> {
                     if let Ok(Event::Text(e)) = reader.read_event_into(&mut buf) {
                         let value = extract_text(e);
                         // println!("type: {:?}, name: {:?}", current_param.param_type, current_param.name);
-                        if current_param.param_type.as_deref() == Some("password") {
-                            current_param.default_value = Some("<DEFAULT>".to_string());
+                        if current_param.param_type == Some(ParamType::Password) {
+                            current_param.default_value = Some(DEFAULT_PARAM_VALUE.to_string());
                         } else {
                             current_param.default_value = Some(value);
                         }
@@ -164,8 +173,8 @@ pub fn parse_jenkins_job_parameter(xml_data: &str) -> Vec<JenkinsJobParameter> {
                     current_param.choices = Some(choices.clone());
                     choices.clear();
                 }
-                val if SUPPORTED_PARAMETER_DEFINITIONS.contains(&val) => {
-                    // println!("type end: {:?}", current_param.param_type);
+                val if PARAMETER_DEFINITIONS.contains_key(val) => {
+                    // println!("type: {:?}, name: {:?}", current_param.param_type, current_param.name);
                     parameters.push(current_param);
                     current_param = JenkinsJobParameter {
                         param_type: None,

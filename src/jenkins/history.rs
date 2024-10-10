@@ -6,7 +6,8 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::PathBuf;
 
-use crate::migrations::migrate_history_yaml_to_toml;
+use crate::jenkins::ParamInfo;
+use crate::migrations::{migrate_history, CURRENT_HISTORY_VERSION};
 use crate::utils::current_timestamp;
 
 pub const HISTORY_FILE: &str = ".jenkins_history.toml";
@@ -16,7 +17,7 @@ pub struct HistoryEntry {
     pub job_url: String,
     pub name: String,
     pub display_name: Option<String>,
-    pub user_params: Option<HashMap<String, String>>,
+    pub params: Option<HashMap<String, ParamInfo>>,
     pub created_at: Option<i64>,
     pub completed_at: Option<i64>,
 }
@@ -31,6 +32,8 @@ pub struct History {
 #[derive(Serialize, Deserialize)]
 pub struct FileHistory {
     pub entries: Vec<HistoryEntry>,
+    #[serde(default)]
+    pub version: u32,
 }
 
 impl History {
@@ -44,7 +47,9 @@ impl History {
         let mut file_path = home_dir().ok_or_else(|| anyhow::anyhow!("Failed to get home directory"))?;
         file_path.push(HISTORY_FILE);
 
-        let _ = migrate_history_yaml_to_toml(&file_path);
+        if let Err(_e) = migrate_history(&file_path) {
+            // eprintln!("Warning: Failed to migrate history: {}.", _e);
+        }
 
         // auto create history file
         if !file_path.exists() {
@@ -56,12 +61,14 @@ impl History {
             entries: vec![],
             file_path,
         };
+
         history.load_history()?;
-        // println!("History::new {:?}", history);
+        // println!("history: {:?}", history);
+
         Ok(history)
     }
 
-    fn load_history(&mut self) -> Result<()> {
+    pub fn load_history(&mut self) -> Result<()> {
         let file = File::open(&self.file_path).context("Failed to open history file")?;
         let metadata = file.metadata().context("Failed to get file metadata")?;
         // println!("metadata: {:?}", metadata);
@@ -72,6 +79,7 @@ impl History {
             self.entries = vec![]; // *self = Self::default();
             return Ok(());
         }
+
         let mut content = String::new();
         let mut reader = BufReader::new(file);
         reader
@@ -85,14 +93,13 @@ impl History {
             }
             Err(_e) => {
                 // println!("Failed to parse history file: {}", _e);
-                // Err(anyhow::anyhow!("Failed to parse history file"))
                 self.entries = vec![];
                 Ok(())
             }
         }
     }
 
-    fn save_history(&self) -> Result<()> {
+    pub fn save_history(&self) -> Result<()> {
         // println!("save_history: {:?}, {:?}", self.entries, self.file_path);
         let file = OpenOptions::new()
             .create(true)
@@ -102,6 +109,7 @@ impl History {
             .context("Failed to open history file for writing")?;
         let mut writer = BufWriter::new(file);
         let file_history = &FileHistory {
+            version: CURRENT_HISTORY_VERSION,
             entries: self.entries.clone(),
         };
         let content = toml::to_string(file_history).context("Failed to serialize history")?;

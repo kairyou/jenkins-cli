@@ -13,6 +13,7 @@ use std::sync::atomic;
 use tokio::{signal, sync::mpsc, sync::Mutex};
 
 mod config;
+mod constants;
 mod env_checks;
 mod i18n;
 mod jenkins;
@@ -22,6 +23,7 @@ mod spinner;
 mod utils;
 
 // use crate::i18n::I18n;
+use crate::constants::{ParamType, MASKED_PASSWORD};
 use crate::i18n::macros::t;
 use crate::{
     config::{initialize_config, CONFIG},
@@ -219,7 +221,7 @@ async fn menu() {
     );
     // Use last build params
     let use_previous_params = history_item.as_ref().map_or(false, |history| {
-        let params = history.user_params.as_ref().unwrap();
+        let params = history.params.as_ref().unwrap();
         let datetime_str = history.created_at.map(|timestamp| {
             let utc_datetime = DateTime::from_timestamp(timestamp, 0).unwrap();
             // UTC => Local
@@ -234,8 +236,13 @@ async fn menu() {
 
         // println!("{:?}", params);
         // println!("{}", serde_json::to_string_pretty(&serde_json::json!(params)).unwrap());
-        for (key, value) in params.iter() {
-            println!(" {}: {}", key.yellow(), value);
+        for (key, param_info) in params.iter() {
+            let display_value = if param_info.r#type == ParamType::Password {
+                MASKED_PASSWORD.to_string()
+            } else {
+                param_info.value.clone()
+            };
+            println!(" {}: {}", key.yellow(), display_value);
         }
         dialoguer::Confirm::with_theme(&ColorfulTheme::default())
             .with_prompt(t!("use-last-build-params"))
@@ -250,7 +257,7 @@ async fn menu() {
         // set self.job_url
         let mut client_guard = client.write().await;
         client_guard.job_url = Some(job_url.to_string());
-        history_item.unwrap().user_params.unwrap_or_default()
+        history_item.unwrap().params.unwrap_or_default()
     } else {
         let params = {
             let mut client_guard = client.write().await; // write for set job_url
@@ -272,7 +279,7 @@ async fn menu() {
             job_url: job_url.clone(),
             name: job.name.clone(),
             display_name: Some(job.display_name.clone()),
-            user_params: Some(user_params.clone()),
+            params: Some(user_params.clone()),
             created_at: Some(0),
             completed_at: Some(0),
         };

@@ -9,9 +9,10 @@ use tokio::sync::mpsc;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, AUTHORIZATION};
 
 // use super::{JenkinsJob, JenkinsResponse, JenkinsJobConfig, JenkinsJobParameter};
+use crate::constants::{ParamType, DEFAULT_PARAM_VALUE, MASKED_PASSWORD};
 use crate::i18n::macros::t;
 use crate::{
-    jenkins::{self, Event, JenkinsJob, JenkinsJobParameter, JenkinsResponse},
+    jenkins::{self, Event, JenkinsJob, JenkinsJobParameter, JenkinsResponse, ParamInfo},
     spinner,
     utils::{clear_previous_line, clear_screen, delay, format_url, get_current_branch, get_git_branches},
 };
@@ -181,7 +182,7 @@ impl JenkinsClient {
     /// # Returns
     ///
     /// A `HashMap` containing the parameter names and their corresponding values.
-    pub async fn prompt_job_parameters(parameter_definitions: Vec<JenkinsJobParameter>) -> HashMap<String, String> {
+    pub async fn prompt_job_parameters(parameter_definitions: Vec<JenkinsJobParameter>) -> HashMap<String, ParamInfo> {
         use dialoguer::theme::ColorfulTheme; // ColorfulTheme/SimpleTheme
         let mut parameters = HashMap::new();
         let mut branches = get_git_branches();
@@ -224,7 +225,7 @@ impl JenkinsClient {
             // let fmt_choices = choices.as_ref().map_or("".to_string(), |c| {
             //     format!(" [可选值: {}]", c.join(", ").bold().green())
             // });
-            let final_value = if let Some(choices) = choices {
+            let (final_value, param_type) = if let Some(choices) = choices {
                 // Use Select to display the Choice list
                 let selection = dialoguer::FuzzySelect::with_theme(&ColorfulTheme::default())
                     .with_prompt(format!("{}{}", t!("prompt-select", "name" => &fmt_name), fmt_desc))
@@ -235,8 +236,8 @@ impl JenkinsClient {
                         std::process::exit(0);
                     });
 
-                choices[selection].clone()
-            } else if param_type.as_deref() == Some("boolean") {
+                (choices[selection].clone(), ParamType::Choice)
+            } else if param_type == Some(ParamType::Boolean) {
                 let default_bool = default_value.parse::<bool>().unwrap_or(false);
                 let value = dialoguer::Confirm::with_theme(&ColorfulTheme::default())
                     .with_prompt(format!("{}{}", t!("prompt-confirm", "name" => fmt_name), fmt_desc))
@@ -246,8 +247,8 @@ impl JenkinsClient {
                     .unwrap_or_else(|_e| {
                         std::process::exit(0);
                     });
-                value.to_string()
-            } else if param_type.as_deref() == Some("password") {
+                (value.to_string(), ParamType::Boolean)
+            } else if param_type == Some(ParamType::Password) {
                 let input = dialoguer::Password::with_theme(&ColorfulTheme::default())
                     .with_prompt(format!("{}{}", t!("prompt-password", "name" => &fmt_name), fmt_desc))
                     .allow_empty_password(true)
@@ -256,9 +257,9 @@ impl JenkinsClient {
                         std::process::exit(0);
                     });
                 if input.is_empty() {
-                    default_value.to_string()
+                    (default_value.to_string(), ParamType::Password)
                 } else {
-                    input
+                    (input, ParamType::Password)
                 }
             } else if !branches.is_empty()
                 && branch_names
@@ -309,22 +310,31 @@ impl JenkinsClient {
                         std::process::exit(0);
                     });
                 if branches[selection] == manual_input {
-                    prompt_user_input(&fmt_name, &fmt_desc, "", trim)
+                    (prompt_user_input(&fmt_name, &fmt_desc, "", trim), ParamType::String)
                 } else {
-                    branches[selection].clone()
+                    (branches[selection].clone(), ParamType::String)
                 }
             } else {
                 // For other types, use text input
-                prompt_user_input(&fmt_name, &fmt_desc, &default_value, trim)
+                (
+                    prompt_user_input(&fmt_name, &fmt_desc, &default_value, trim),
+                    param_type.unwrap_or(ParamType::String),
+                )
             };
 
-            let output_value = if param_type.as_deref() == Some("password") {
-                "********".to_string()
+            let output_value = if param_type == ParamType::Password {
+                MASKED_PASSWORD.to_string()
             } else {
                 final_value.clone()
             };
             println!("{}", output_value);
-            parameters.insert(name, final_value);
+            parameters.insert(
+                name,
+                ParamInfo {
+                    value: final_value,
+                    r#type: param_type,
+                },
+            );
         }
         parameters
     }
@@ -340,13 +350,20 @@ impl JenkinsClient {
     pub async fn trigger_build(
         &self,
         job_url: &str,
-        parameters: HashMap<String, String>,
+        parameters: HashMap<String, ParamInfo>,
     ) -> Result<String, anyhow::Error> {
         // Triggering with format!("{}/build?delay=0sec", job_url) doesn't use a queue
         let url = format_url(&format!("{}/buildWithParameters", job_url));
         let headers = self.build_headers(None)?;
         // println!("{}, headers: {:?}, params: {:?}", url, headers.clone(), parameters);
-        let result = self.client.post(&url).headers(headers).form(&parameters).send().await;
+
+        let params: HashMap<String, String> = parameters
+            .into_iter()
+            .filter(|(_, v)| v.value != DEFAULT_PARAM_VALUE)
+            .map(|(k, v)| (k, v.value))
+            .collect();
+
+        let result = self.client.post(&url).headers(headers).form(&params).send().await;
         let response = self.handle_response(result).await?;
         // queue URL, e.g. http://jenkins_url/queue/item/1/
         let queue_location = response

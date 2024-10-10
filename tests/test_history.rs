@@ -1,5 +1,6 @@
+use jenkins::constants::ParamType;
 use jenkins::jenkins::history::*;
-use jenkins::migrations::migrate_history_yaml_to_toml;
+use jenkins::migrations::migrate_history;
 use std::fs;
 use tempfile::tempdir;
 
@@ -27,7 +28,7 @@ fn test_upsert_history() {
         job_url: "http://example.com/job1".to_string(),
         name: "Job1".to_string(),
         display_name: Some("Test Job 1".to_string()),
-        user_params: None,
+        params: None,
         created_at: None,
         completed_at: None,
     };
@@ -50,7 +51,7 @@ fn test_get_history() {
         job_url: "http://example.com/job1".to_string(),
         name: "Job1".to_string(),
         display_name: Some("Test Job 1".to_string()),
-        user_params: None,
+        params: None,
         created_at: Some(1000),
         completed_at: None,
     };
@@ -101,7 +102,7 @@ fn test_update_field() {
 }
 
 #[test]
-fn test_migrate_yaml_to_toml() {
+fn test_migrate_history_v0_yaml() {
     let temp_dir = tempdir().unwrap();
     let yaml_path = temp_dir.path().join("test_history.yaml");
     let toml_path = temp_dir.path().join("test_history.toml");
@@ -112,17 +113,32 @@ fn test_migrate_yaml_to_toml() {
   name: "Job1"
   display_name: "Test Job 1"
   created_at: 1000
+  user_params:
+    IS_DEBUG: "true"
+    APP_ENV: sit
+    GIT_BRANCH: main
 "#;
     fs::write(&yaml_path, yaml_content).unwrap();
 
-    migrate_history_yaml_to_toml(&toml_path).unwrap();
+    migrate_history(&toml_path).unwrap();
 
     assert!(!yaml_path.exists());
     assert!(toml_path.exists());
 
     // Verify TOML content
     let toml_content = fs::read_to_string(&toml_path).unwrap();
+    println!("test_migrate toml_content: {}", toml_content);
     let file_history: FileHistory = toml::from_str(&toml_content).unwrap();
-    assert_eq!(file_history.entries.len(), 1);
-    assert_eq!(file_history.entries[0].name, "Job1");
+
+    let entry = &file_history.entries[0];
+    println!("test_migrate params: {:?}", entry.params);
+    assert_eq!(entry.name, "Job1");
+    assert_eq!(entry.job_url, "http://example.com/job1");
+
+    let params = entry.params.as_ref().unwrap();
+    assert_eq!(params.len(), 3); // params length
+
+    let git_branch = params.get("GIT_BRANCH").unwrap();
+    assert_eq!(git_branch.value, "main");
+    assert_eq!(git_branch.r#type, ParamType::String);
 }
