@@ -129,7 +129,7 @@ cargo test --test test_i18n -- --nocapture
 ps aux | grep cargo | grep -v grep | awk '{print $2}' | xargs kill -9
 ```
 
-- 报错 `选择 Jenkins 环境失败: IO error: 函数不正确 （os error 1）`, `IO error: Incorrect function. (os error 1)`
+- `IO error: 函数不正确 （os error 1）` or `IO error: Incorrect function. (os error 1)`
   在低版本的`git-bash.exe`中会出现这个问题, 使用 `git-cmd.exe`, windows自带的`cmd.exe`或者`powershell.exe`都正常
 
   [dialoguer/console](https://github.com/console-rs/console/issues/35)
