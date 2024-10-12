@@ -4,6 +4,7 @@ use dialoguer::{theme::ColorfulTheme, FuzzySelect};
 use dirs::home_dir;
 use once_cell::sync::Lazy;
 use std::fs;
+use std::path::PathBuf;
 use tokio::sync::Mutex;
 
 use crate::env_checks::check_unsupported_terminal;
@@ -15,6 +16,7 @@ use crate::models::{FileConfig, GlobalConfig, JenkinsConfig, RuntimeConfig};
 use crate::utils::clear_screen;
 
 pub const CONFIG_FILE: &str = ".jenkins.toml";
+pub const DATA_DIR_NAME: &str = ".jenkins-cli";
 
 pub static CONFIG: Lazy<Mutex<RuntimeConfig>> = Lazy::new(|| {
     Mutex::new(RuntimeConfig {
@@ -23,8 +25,21 @@ pub static CONFIG: Lazy<Mutex<RuntimeConfig>> = Lazy::new(|| {
     })
 });
 
+pub static DATA_DIR: Lazy<PathBuf> = Lazy::new(|| {
+    let home_dir = home_dir().expect(&t!("get-home-dir-failed"));
+    let data_dir = home_dir.join(DATA_DIR_NAME);
+
+    if !data_dir.exists() {
+        fs::create_dir_all(&data_dir).expect(&t!("create-data-dir-failed"));
+    }
+
+    data_dir
+});
+
 // let (global_config, jenkins_config) = CONFIG.lock().await;
 pub async fn initialize_config() -> Result<()> {
+    let _ = DATA_DIR.as_path(); // auto create data dir
+
     let cfg = load_config().expect(&t!("load-config-failed"));
     let global_config = cfg.config;
     let jenkins_config = cfg.jenkins;

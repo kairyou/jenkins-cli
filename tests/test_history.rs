@@ -1,6 +1,6 @@
 use jenkins::constants::ParamType;
 use jenkins::jenkins::history::*;
-use jenkins::migrations::migrate_history;
+use jenkins::migrations::migrate_history_yaml_to_toml;
 use std::fs;
 use tempfile::tempdir;
 
@@ -105,7 +105,7 @@ fn test_update_field() {
 fn test_migrate_history_v0_yaml() {
     let temp_dir = tempdir().unwrap();
     let yaml_path = temp_dir.path().join("test_history.yaml");
-    let toml_path = temp_dir.path().join("test_history.toml");
+    let toml_path = yaml_path.with_extension("toml");
 
     // Create test YAML file
     let yaml_content = r#"
@@ -120,7 +120,7 @@ fn test_migrate_history_v0_yaml() {
 "#;
     fs::write(&yaml_path, yaml_content).unwrap();
 
-    migrate_history(&toml_path).unwrap();
+    migrate_history_yaml_to_toml(&yaml_path, &toml_path).unwrap();
 
     assert!(!yaml_path.exists());
     assert!(toml_path.exists());

@@ -3,6 +3,8 @@
 // use jenkins::utils::version_compare;
 
 #[doc(hidden)]
+pub mod config;
+#[doc(hidden)]
 pub mod constants;
 #[doc(hidden)]
 pub mod env_checks;
