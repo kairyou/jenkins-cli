@@ -25,32 +25,34 @@ sudo apt install -y libssl-dev pkg-config
 # cargo tree -i openssl-sys # dependency tree
 # cargo add clap --features derive # clap = { version = "4.0", features = ["derive"] }
 
-# cargo add serde --features derive # 序列化/反序列化
-# cargo add serde_json # json
-# cargo add serde_yaml # yaml
-# cargo add toml # toml
-# cargo add quick-xml --features "serialize" # xml
+# cargo add serde --features derive # Serialization/deserialization
+# cargo add serde_json # JSON
+# cargo add serde_yaml # YAML
+# cargo add toml # TOML
+# cargo add quick-xml --features "serialize" # XML
 # cargo add dirs # dirs::home_dir
-# cargo add tokio --features "full" # async/await
+# cargo add tokio --features "full" # Async/await
 # cargo add reqwest --no-default-features --features "json,rustls-tls" # reqwest disable openssl-sys
-# cargo add anyhow # 错误处理 thiserror/anyhow
-# cargo add once_cell # once_cell::sync::Lazy;
+# cargo add anyhow # Error handling thiserror/anyhow
+# cargo add once_cell # once_cell::sync::Lazy
 
-# cargo add chrono # 时间
-# cargo add regex # 正则
-# cargo add url # url解析
+# cargo add chrono # Date/time formatting
+# cargo add regex # Regular expressions
+# cargo add url # URL parsing
 # cargo add base64
-# cargo add dialoguer --features "fuzzy-select" # 单选/多选
-# cargo add console # 控制台交互 (dialoguer ColorfulTheme)
-# cargo add indicatif # 进度条/spinner
-# cargo add colored # 颜色
-# cargo add crossterm # 终端交互 clear/position
-# cargo add libc # c库 #flush_stdin
-# cargo add winapi --features "wincon" # windows api #flush_stdin
+# cargo add dialoguer --features "fuzzy-select" # Single/multi-select
+# cargo add console # Console interaction (dialoguer ColorfulTheme)
+# cargo add indicatif # Progress bar/spinner
+# cargo add colored # Colors
+# cargo add crossterm # Terminal interaction clear/position
+# cargo add libc # C library #flush_stdin
+# cargo add winapi --features "wincon" # Windows API #flush_stdin
 
 # cargo add fluent fluent-langneg # i18n
-# cargo add sys-locale # get system locale
-# cargo add rust-embed # embed files to binary
+# cargo add sys-locale # Get system locale
+# cargo add rust-embed # Embed files to binary
+
+# cargo add semver # Version compare
 
 # cargo add --dev tempfile # For temp files/dirs in tests
 ```
@@ -93,7 +95,7 @@ cargo build --target x86_64-unknown-linux-gnu --release # build for linux
 # cargo build --target x86_64-apple-darwin --release # build for intel mac
 # cargo build --target aarch64-apple-darwin --release # build for M1/M2 Mac
 
-# 分析二进制文件的大小
+# Analyze binary file size
 # cargo bloat --release --crates # cargo install cargo-bloat
 
 # = Release
@@ -123,18 +125,22 @@ cargo test --test test_i18n -- --nocapture
 
 #### FAQs
 
-- cargo add xxx 一直卡在 Blocking waiting for file lock on package cache
+- `cargo add xxx` command hangs with `Blocking waiting for file lock on package cache`
 
 ```sh
 ps aux | grep cargo | grep -v grep | awk '{print $2}' | xargs kill -9
 ```
 
-- `IO error: 函数不正确 （os error 1）` or `IO error: Incorrect function. (os error 1)`
-  在低版本的`git-bash.exe`中会出现这个问题, 使用 `git-cmd.exe`, windows自带的`cmd.exe`或者`powershell.exe`都正常
+- `IO error: Incorrect function. (os error 1)`
+  This issue occurs in low-version `git-bash.exe`, use `git-cmd.exe`, `cmd.exe` or `powershell.exe` on windows, or `wsl.exe`, `git-cmd.exe` on linux/macos
 
   [dialoguer/console](https://github.com/console-rs/console/issues/35)
 
   [mintty inputoutput](https://github.com/mintty/mintty/wiki/Tips#inputoutput-interaction-with-alien-programs)
 
-  通过升级git-bash解决, 或在其他终端运行, 如 `cmd.exe`, `powershell.exe`, `wsl.exe`, `git-cmd.exe` 等, 或者用 `winpty jenkins`
-  
+  To fix this issue, upgrade git-bash, or use other terminals, such as `cmd.exe`, `powershell.exe`, `wsl.exe`, `git-cmd.exe`, or `winpty jenkins`
+
+- `#[cfg(debug_assertions)]` dev mode, `#[cfg(not(debug_assertions))]` release mode
+
+- `cfg!(target_os = "windows")` platform: windows/linux/macos
+
