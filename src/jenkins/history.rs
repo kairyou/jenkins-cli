@@ -29,7 +29,7 @@ pub struct History {
     pub file_path: PathBuf,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct FileHistory {
     pub entries: Vec<HistoryEntry>,
     #[serde(default)]

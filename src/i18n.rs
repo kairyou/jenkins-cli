@@ -84,7 +84,7 @@ impl I18n {
     }
 
     #[allow(dead_code)]
-    pub fn t<'a, S>(key: &str, args: Option<&[(&str, S)]>, locale: Option<&str>) -> String
+    pub fn t<S>(key: &str, args: Option<&[(&str, S)]>, locale: Option<&str>) -> String
     where
         S: ToString + Clone,
     {
@@ -108,16 +108,15 @@ impl I18n {
                     .format_pattern(pattern, Some(&fluent_args), &mut vec![])
                     .into_owned()
             })
-            .unwrap_or_else(|| key.to_string());
-        let clean_result = result.replace(
-            [
-                // remove character with zero width (@colored)
-                '\u{2068}', '\u{2069}',
-            ],
-            "",
-        );
-        // println!("result: {:?}", clean_result);
-        clean_result
+            .unwrap_or_else(|| key.to_string())
+            .replace(
+                [
+                    // remove character with zero width (@colored)
+                    '\u{2068}', '\u{2069}',
+                ],
+                "",
+            );
+        result
     }
 
     #[allow(dead_code)]

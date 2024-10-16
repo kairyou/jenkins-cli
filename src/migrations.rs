@@ -38,7 +38,7 @@ pub fn migrate_config_yaml_to_toml(config_path: &PathBuf) -> Result<()> {
 /// Migrate history from yaml to toml (v0)
 pub fn migrate_history_yaml_to_toml(yaml_path: &PathBuf, toml_path: &PathBuf) -> Result<()> {
     if yaml_path.exists() {
-        let yaml_content = fs::read_to_string(&yaml_path)?;
+        let yaml_content = fs::read_to_string(yaml_path)?;
         // HistoryItem: job_url/name/display_name/user_params(key=value)/created_at/completed_at
         let yaml_entries: Vec<YamlValue> = serde_yaml::from_str(&yaml_content)?;
 
@@ -92,7 +92,8 @@ pub fn migrate_history_yaml_to_toml(yaml_path: &PathBuf, toml_path: &PathBuf) ->
 pub fn migrate_history_location(history_path: &PathBuf) -> Result<()> {
     let old_history_paths = vec![home_dir().unwrap().join(".jenkins_history.toml")];
     for path in old_history_paths {
-        println!("migrate_history_location: {:?}", path);
+        // #[cfg(debug_assertions)]
+        // println!("migrate_history_location: {:?}", path);
         if path.exists() {
             fs::rename(path, history_path)?;
         }
@@ -146,7 +147,7 @@ pub fn migrate_history() -> Result<()> {
 
 // 1. add ParamInfo(type/value)
 // 2. rename user_params to params
-fn migrate_to_v1(json: &mut JsonValue) -> Result<()> {
+pub fn migrate_to_v1(json: &mut JsonValue) -> Result<()> {
     json["version"] = json!(1);
     if let Some(entries) = json.get_mut("entries").and_then(JsonValue::as_array_mut) {
         for entry in entries {

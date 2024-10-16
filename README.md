@@ -129,7 +129,7 @@ Note: Keep your API token secure. Do not share it or commit it to version contro
 - [x] Auto-detect current directory's git branch
 - [x] Remember last selected project and build parameters
 - [x] i18n support (fluent)
-- [ ] Auto-upgrade feature (self_update)
+- [x] Automatically check for updates
 
 ## License
 

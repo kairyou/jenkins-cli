@@ -44,3 +44,7 @@ use-other-win-terminals = 1. Use other terminals, such as Git CMD, PowerShell, c
 use-winpty = 2. Use the winpty command to start the program, for example:
 winpty-example = winpty jenkins.exe
 unsupported-terminal = Unsupported terminal detected, please check your terminal settings.
+
+new-version-available = A new version of jenkins CLI is available: { $version }
+current-version = Current version: { $version }
+update-instruction = Run `{ $command }` or install from { $url }

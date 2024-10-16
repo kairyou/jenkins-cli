@@ -30,6 +30,7 @@ quick-xml = { version = "0.36.1", features = ["serialize"] }
 regex = "1.10.6"
 reqwest = { version = "0.12.7", features = ["json", "rustls-tls"], default-features = false }
 rust-embed = "8.5.0"
+semver = "1.0.23"
 serde = { version = "1.0.210", features = ["derive"] }
 serde_json = "1.0.128"
 serde_yaml = "0.9.34"
@@ -39,6 +40,9 @@ toml = "0.8.19"
 url = "2.5.2"
 winapi = { version = "0.3.9", features = ["wincon"] }
 
+
+[profile.dev]
+# opt-level = 1
 
 # for optimize build size
 [profile.release]
