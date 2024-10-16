@@ -18,7 +18,7 @@ static UPDATE_VERSION: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 static UPDATE_NOTIFIED: AtomicBool = AtomicBool::new(false);
 
 // debug mode: skip update check
-const DEBUG_SKIP_UPDATE_CHECK: bool = false;
+const DEBUG_SKIP_UPDATE_CHECK: bool = true;
 
 pub async fn check_update() {
     if let Some(version) = perform_update_check().await {
@@ -122,16 +122,30 @@ async fn get_latest_version() -> Result<Option<String>, reqwest::Error> {
         .send()
         .await?;
 
-    if response.status() == reqwest::StatusCode::FOUND {
-        if let Some(location) = response.headers().get("location") {
-            let location = location.to_str().unwrap_or_default();
-            if let Some(version) = location.rsplit('/').next() {
-                return Ok(Some(version.trim_start_matches('v').to_string()));
-            }
+    let version = match response.status() {
+        status if status.is_success() => {
+            let content = response.text().await?;
+            content.trim().to_string()
         }
-    }
+        reqwest::StatusCode::FOUND => response
+            .headers()
+            .get("location")
+            .and_then(|loc| loc.to_str().ok())
+            .and_then(|loc| loc.rsplit('/').next())
+            .map(|v| v.trim_start_matches('v').to_string())
+            .unwrap_or_default(),
+        _ => return Ok(None),
+    };
 
-    Ok(None)
+    if !version.is_empty() && is_valid_version(&version) {
+        Ok(Some(version))
+    } else {
+        Ok(None)
+    }
+}
+
+fn is_valid_version(version: &str) -> bool {
+    Version::parse(version).is_ok()
 }
 
 pub fn get_command() -> String {
