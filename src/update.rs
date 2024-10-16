@@ -17,8 +17,10 @@ static UPDATE_AVAILABLE: AtomicBool = AtomicBool::new(false);
 static UPDATE_VERSION: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 static UPDATE_NOTIFIED: AtomicBool = AtomicBool::new(false);
 
-// debug mode: skip update check
-const DEBUG_SKIP_UPDATE_CHECK: bool = true;
+#[cfg(feature = "force_update_check")]
+const FORCE_UPDATE_CHECK: bool = true;
+#[cfg(not(feature = "force_update_check"))]
+const FORCE_UPDATE_CHECK: bool = false;
 
 pub async fn check_update() {
     if let Some(version) = perform_update_check().await {
@@ -46,7 +48,7 @@ async fn perform_update_check() -> Option<String> {
 
     let time_until_next_check = {
         let base_time = CHECK_INTERVAL.saturating_sub(current_time.saturating_sub(last_check));
-        if cfg!(debug_assertions) && DEBUG_SKIP_UPDATE_CHECK {
+        if cfg!(debug_assertions) && FORCE_UPDATE_CHECK {
             println!("Debug: Time until next check: {} seconds", base_time);
             0
         } else {
@@ -98,7 +100,7 @@ async fn check_latest_version() -> Result<Option<String>, reqwest::Error> {
     match latest_version {
         Some(version) => match (Version::parse(&version), Version::parse(current_version)) {
             (Ok(latest), Ok(current)) => {
-                if cfg!(debug_assertions) && DEBUG_SKIP_UPDATE_CHECK && latest >= current {
+                if cfg!(debug_assertions) && FORCE_UPDATE_CHECK && latest >= current {
                     return Ok(Some(version));
                 }
                 if latest > current {
