@@ -20,6 +20,7 @@ mod jenkins;
 mod migrations;
 mod models;
 mod spinner;
+mod update;
 mod utils;
 
 // use crate::i18n::I18n;
@@ -33,6 +34,7 @@ use crate::{
         Event,
     },
     models::JenkinsConfig,
+    update::{check_update, notify_if_update_available},
     utils::{clear_screen, current_timestamp, delay, flush_stdin, format_url},
 };
 
@@ -45,6 +47,9 @@ static LOADING: Lazy<std::sync::Arc<Mutex<bool>>> = Lazy::new(|| std::sync::Arc:
 
 #[tokio::main]
 async fn main() {
+    // async check update
+    tokio::spawn(check_update());
+
     let matches = Command::new("jenkins")
         .version(env!("CARGO_PKG_VERSION"))
         // .author("Your Name <your.email@example.com>")
@@ -188,6 +193,8 @@ async fn menu() {
         .map(|p| format!("{} ({})", p.display_name, p.name))
         .collect();
 
+    notify_if_update_available(); // before select project
+
     let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
         .with_prompt(t!("select-project-prompt"))
         .items(&project_names)
@@ -209,6 +216,8 @@ async fn menu() {
     // println!("Selected project: {}", job.display_name.cyan().bold());
     let job_url = format_url(&format!("{}/job/{}", jenkins_config.url, job.name));
     // println!("{}", job_url.underline().blue());
+
+    notify_if_update_available(); // before prompt params
 
     // Get build history
     let history_item = history.get_history(
@@ -273,6 +282,8 @@ async fn menu() {
     println!("Job URL: {}", job_url.underline().blue());
     // println!("user_params: {:?}", user_params);
     // std::process::exit(1); // debug params
+
+    notify_if_update_available(); // before trigger build
 
     if enable_history {
         let mut history_param = HistoryEntry {

@@ -1,16 +1,16 @@
 use anyhow::{Context, Result};
-use dirs::home_dir;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::PathBuf;
 
+use crate::config::DATA_DIR;
 use crate::jenkins::ParamInfo;
 use crate::migrations::{migrate_history, CURRENT_HISTORY_VERSION};
 use crate::utils::current_timestamp;
 
-pub const HISTORY_FILE: &str = ".jenkins_history.toml";
+pub const HISTORY_FILE: &str = "history.toml";
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct HistoryEntry {
@@ -29,7 +29,7 @@ pub struct History {
     pub file_path: PathBuf,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct FileHistory {
     pub entries: Vec<HistoryEntry>,
     #[serde(default)]
@@ -44,10 +44,9 @@ impl History {
     }
 
     pub fn new() -> Result<Self> {
-        let mut file_path = home_dir().ok_or_else(|| anyhow::anyhow!("Failed to get home directory"))?;
-        file_path.push(HISTORY_FILE);
+        let file_path = DATA_DIR.join(HISTORY_FILE);
 
-        if let Err(_e) = migrate_history(&file_path) {
+        if let Err(_e) = migrate_history() {
             // eprintln!("Warning: Failed to migrate history: {}.", _e);
         }
 

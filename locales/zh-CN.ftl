@@ -44,3 +44,7 @@ use-other-win-terminals = 1. 使用其他终端，例如 Git CMD、PowerShell、
 use-winpty = 2. 使用 winpty 命令启动程序，例如：
 winpty-example = winpty jenkins.exe
 unsupported-terminal = 检测到不支持的终端，请检查终端设置。
+
+new-version-available = jenkins CLI 有新版本可用：{ $version }
+current-version = 当前版本：{ $version }
+update-instruction = 运行 `{ $command }` 或从 { $url } 安装

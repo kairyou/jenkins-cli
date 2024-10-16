@@ -1,8 +1,8 @@
 use colored::*;
+use semver::Version;
 use std::env;
 
 use crate::i18n::macros::t;
-use crate::utils;
 
 /// Check if the current terminal is `mintty`
 #[allow(dead_code)]
@@ -33,7 +33,9 @@ pub fn is_terminal_unsupported() -> (bool, Option<String>) {
     if let Ok(term_program) = env::var("TERM_PROGRAM") {
         if term_program == "mintty" {
             if let Ok(term_version) = env::var("TERM_PROGRAM_VERSION") {
-                if utils::version_compare(&term_version, "3.6.4", "<") {
+                let current = Version::parse(&term_version).unwrap_or_else(|_| Version::new(0, 0, 0));
+                let target = Version::parse("3.6.4").unwrap();
+                if current < target {
                     return (true, Some(term_program)); // mintty version is too low
                 }
             }

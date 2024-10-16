@@ -84,18 +84,23 @@ impl I18n {
     }
 
     #[allow(dead_code)]
-    pub fn t(key: &str, args: Option<&[(&str, FluentValue)]>, locale: Option<&str>) -> String {
+    pub fn t<S>(key: &str, args: Option<&[(&str, S)]>, locale: Option<&str>) -> String
+    where
+        S: ToString + Clone,
+    {
         let locale = locale.map(|l| l.to_string()).unwrap_or_else(Self::locale);
         let bundle = get_bundle(&locale);
 
         let mut fluent_args = FluentArgs::new();
         if let Some(arg_list) = args {
             for &(name, ref value) in arg_list {
-                fluent_args.set(name, value.clone());
+                fluent_args.set(name, FluentValue::String(value.to_string().into()));
             }
         }
 
-        bundle
+        // println!("fluent_args: {:?}", fluent_args);
+
+        let result = bundle
             .get_message(key)
             .and_then(|msg| msg.value())
             .map(|pattern| {
@@ -104,6 +109,14 @@ impl I18n {
                     .into_owned()
             })
             .unwrap_or_else(|| key.to_string())
+            .replace(
+                [
+                    // remove character with zero width (@colored)
+                    '\u{2068}', '\u{2069}',
+                ],
+                "",
+            );
+        result
     }
 
     #[allow(dead_code)]
@@ -166,20 +179,20 @@ pub mod macros {
     macro_rules! __t {
         // Only key
       ($key:expr) => {
-          $crate::i18n::I18n::t($key, None, None)
+          $crate::i18n::I18n::t($key, None::<&[(&str, &str)]>, None)
       };
       // Key and locale
       ($key:expr; $locale:expr) => {
-          $crate::i18n::I18n::t($key, None, Some($locale))
+          $crate::i18n::I18n::t($key, None::<&[(&str, &str)]>, Some($locale))
       };
       // Key and arguments
       ($key:expr, $($arg_name:expr => $arg_value:expr),+) => {{
-          let args = &[$(($arg_name, $arg_value.into())),+];
+          let args = &[$(($arg_name, $arg_value)),+];
           $crate::i18n::I18n::t($key, Some(args), None)
       }};
       // Key, arguments, and locale
       ($key:expr, $($arg_name:expr => $arg_value:expr),+ $(,)?; $locale:expr) => {{
-          let args = &[$(($arg_name, $arg_value.into())),+];
+          let args = &[$(($arg_name, $arg_value)),+];
           $crate::i18n::I18n::t($key, Some(args), Some($locale))
       }};
     }

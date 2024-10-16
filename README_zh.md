@@ -129,7 +129,7 @@ Jenkins User ID 就是登录 Jenkins 网页界面的用户名。
 - [x] 自动读取当前目录 git 分支
 - [x] 记录上次选择的项目/构建参数
 - [x] i18n 支持 (fluent)
-- [ ] 自动升级功能 (self_update)
+- [x] 自动检查更新
 
 ## 许可证
 

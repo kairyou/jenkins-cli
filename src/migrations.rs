@@ -1,6 +1,10 @@
+use crate::config::DATA_DIR;
 use crate::constants::ParamType;
+use crate::i18n::macros::t;
+use crate::jenkins::history::HISTORY_FILE;
 use crate::models::{FileConfig, JenkinsConfig};
 use anyhow::{Context, Result};
+use dirs::home_dir;
 use serde_json::json;
 use serde_json::Value as JsonValue;
 use serde_yaml::Value as YamlValue;
@@ -32,10 +36,9 @@ pub fn migrate_config_yaml_to_toml(config_path: &PathBuf) -> Result<()> {
 }
 
 /// Migrate history from yaml to toml (v0)
-pub fn migrate_history_yaml_to_toml(config_path: &PathBuf) -> Result<()> {
-    let yaml_path = config_path.with_extension("yaml");
+pub fn migrate_history_yaml_to_toml(yaml_path: &PathBuf, toml_path: &PathBuf) -> Result<()> {
     if yaml_path.exists() {
-        let yaml_content = fs::read_to_string(&yaml_path)?;
+        let yaml_content = fs::read_to_string(yaml_path)?;
         // HistoryItem: job_url/name/display_name/user_params(key=value)/created_at/completed_at
         let yaml_entries: Vec<YamlValue> = serde_yaml::from_str(&yaml_content)?;
 
@@ -79,22 +82,39 @@ pub fn migrate_history_yaml_to_toml(config_path: &PathBuf) -> Result<()> {
             "version": 0
         });
         let content = toml::to_string(&file_history)?;
-        fs::write(config_path, content)?;
+        fs::write(toml_path, content)?;
         fs::remove_file(yaml_path)?;
     }
     Ok(())
 }
 
-/// Migrate history to the latest version
-pub fn migrate_history(config_path: &PathBuf) -> Result<()> {
-    // YAML => TOML
-    migrate_history_yaml_to_toml(config_path)?;
+/// Migrate old location of history file
+pub fn migrate_history_location(history_path: &PathBuf) -> Result<()> {
+    let old_history_paths = vec![home_dir().unwrap().join(".jenkins_history.toml")];
+    for path in old_history_paths {
+        // #[cfg(debug_assertions)]
+        // println!("migrate_history_location: {:?}", path);
+        if path.exists() {
+            fs::rename(path, history_path)?;
+        }
+    }
+    Ok(())
+}
 
-    if !config_path.exists() {
+/// Migrate history to the latest version
+pub fn migrate_history() -> Result<()> {
+    let history_path = DATA_DIR.join(HISTORY_FILE);
+    let home_dir = home_dir().expect(&t!("get-home-dir-failed"));
+    // v0: YAML => TOML
+    let yaml_path = home_dir.join(".jenkins_history.yaml");
+    migrate_history_yaml_to_toml(&yaml_path, &history_path)?;
+    migrate_history_location(&history_path)?;
+
+    if !history_path.exists() {
         return Ok(());
     }
 
-    let file = std::fs::File::open(config_path).context("Failed to open history file")?;
+    let file = std::fs::File::open(&history_path).context("Failed to open history file")?;
     let mut reader = std::io::BufReader::new(file);
     let mut content = String::new();
     reader
@@ -119,7 +139,7 @@ pub fn migrate_history(config_path: &PathBuf) -> Result<()> {
         }
 
         let migrated_toml = toml::to_string(&json_value).context("Failed to convert JSON to TOML")?;
-        fs::write(config_path, migrated_toml).context("Failed to write migrated history")?;
+        fs::write(&history_path, migrated_toml).context("Failed to write migrated history")?;
     }
 
     Ok(())
@@ -127,7 +147,7 @@ pub fn migrate_history(config_path: &PathBuf) -> Result<()> {
 
 // 1. add ParamInfo(type/value)
 // 2. rename user_params to params
-fn migrate_to_v1(json: &mut JsonValue) -> Result<()> {
+pub fn migrate_to_v1(json: &mut JsonValue) -> Result<()> {
     json["version"] = json!(1);
     if let Some(entries) = json.get_mut("entries").and_then(JsonValue::as_array_mut) {
         for entry in entries {
