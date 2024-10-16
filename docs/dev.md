@@ -68,6 +68,7 @@ cargo add spinners # spinner
 
 ```bash
 cargo run --
+# cargo run --features "force_update_check" --
 ```
 
 ### Build
