@@ -40,6 +40,11 @@ toml = "0.8.19"
 url = "2.5.2"
 winapi = { version = "0.3.9", features = ["wincon"] }
 
+[dev-dependencies]
+tempfile = "3.12.0"
+
+[features]
+force_update_check = [] # force update check in debug mode
 
 [profile.dev]
 # opt-level = 1
@@ -50,6 +55,3 @@ lto = true
 debug = false
 opt-level = "z"
 panic = "abort"
-
-[dev-dependencies]
-tempfile = "3.12.0"
