@@ -81,31 +81,45 @@ pub async fn delay(ms: u64) {
     tokio::time::sleep(std::time::Duration::from_millis(ms)).await;
 }
 
-/// compare two version numbers, return a boolean value, support specified comparison operators
-pub fn version_compare(current_version: &str, target_version: &str, op: &str) -> bool {
-    use std::cmp::Ordering;
-    let current: Vec<u32> = current_version.split('.').filter_map(|s| s.parse().ok()).collect();
-    let target: Vec<u32> = target_version.split('.').filter_map(|s| s.parse().ok()).collect();
+// /// compare two version numbers, return a boolean value, support specified comparison operators
+// /// # Examples
+// /// ```rust
+// /// use jenkins::utils::version_compare;
+// ///
+// /// assert!(version_compare("2.5.1", "3.0.0", "<"));
+// /// assert!(version_compare("3.6.1", "3.0.0", ">"));
+// /// assert!(version_compare("3.6.1", "3.6.1", "=="));
+// /// assert!(version_compare("3.6", "3.6.4", "<"));
+// /// assert!(version_compare("3.6.4", "3.6.4", "=="));
+// /// assert!(version_compare("3.6.4", "3.6.4", ">="));
+// /// assert!(version_compare("3.6.4", "3.6.1", ">="));
+// /// assert!(version_compare("3.6.1", "3.6.4", "<="));
+// /// ```
+// #[allow(dead_code)]
+// pub fn version_compare(current_version: &str, target_version: &str, op: &str) -> bool {
+//     use std::cmp::Ordering;
+//     let current: Vec<u32> = current_version.split('.').filter_map(|s| s.parse().ok()).collect();
+//     let target: Vec<u32> = target_version.split('.').filter_map(|s| s.parse().ok()).collect();
 
-    let ordering = current
-        .iter()
-        .zip(target.iter())
-        .find_map(|(c, t)| match c.cmp(t) {
-            Ordering::Equal => None,
-            non_eq => Some(non_eq),
-        })
-        .unwrap_or_else(|| current.len().cmp(&target.len())); // if length is different, the shorter version is considered smaller
+//     let ordering = current
+//         .iter()
+//         .zip(target.iter())
+//         .find_map(|(c, t)| match c.cmp(t) {
+//             Ordering::Equal => None,
+//             non_eq => Some(non_eq),
+//         })
+//         .unwrap_or_else(|| current.len().cmp(&target.len())); // if length is different, the shorter version is considered smaller
 
-    match op {
-        "==" => ordering == Ordering::Equal,
-        "!=" => ordering != Ordering::Equal,
-        ">" => ordering == Ordering::Greater,
-        ">=" => ordering == Ordering::Greater || ordering == Ordering::Equal,
-        "<" => ordering == Ordering::Less,
-        "<=" => ordering == Ordering::Less || ordering == Ordering::Equal,
-        _ => false, // handle unsupported comparison operators
-    }
-}
+//     match op {
+//         "==" => ordering == Ordering::Equal,
+//         "!=" => ordering != Ordering::Equal,
+//         ">" => ordering == Ordering::Greater,
+//         ">=" => ordering == Ordering::Greater || ordering == Ordering::Equal,
+//         "<" => ordering == Ordering::Less,
+//         "<=" => ordering == Ordering::Less || ordering == Ordering::Equal,
+//         _ => false, // handle unsupported comparison operators
+//     }
+// }
 
 /// flush stdin buffer (prevent `stdin` from reading previous inputs, such as pressing `Enter` key)
 pub fn flush_stdin() {
