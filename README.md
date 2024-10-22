@@ -8,7 +8,7 @@ A powerful and efficient Jenkins CLI tool written in Rust. Simplifies deployment
 
 - Fast and efficient Jenkins job deployment
 - Intuitive command-line interface with real-time console output
-- Multi-environment support with project filtering capabilities
+- Support for multiple Jenkins services, project filtering
 - Common Jenkins operations support (e.g., triggering builds)
 - High performance and cross-platform compatibility (Mac, Windows, Linux)
 - Remembers last build parameters for quick re-runs
@@ -49,7 +49,7 @@ jenkins
 
 This command will:
 
-1. Prompt you to select an environment (if multiple are configured)
+1. Prompt you to select a Jenkins service (if multiple are configured)
 2. Display a list of available projects
 3. Select a project and set build parameters
 4. Trigger the build and show real-time console output
@@ -86,8 +86,8 @@ token = "your-api-token"
 - `config`: Global configuration section
   - `locale`: Set language (optional), default auto detect, e.g. "zh-CN", "en-US"
   - `enable_history`: Remember last build parameters (optional), default true, set to false to disable
-- `jenkins`: Environment configuration section (supports multiple environments)
-  - `name`: Environment name (e.g., "SIT", "UAT", "PROD")
+- `jenkins`: Service configuration section (supports multiple services)
+  - `name`: Service name (e.g., "SIT", "UAT", "PROD")
   - `url`: Jenkins server URL
   - `user`: Your Jenkins user ID
   - `token`: Your Jenkins API token
@@ -121,7 +121,7 @@ Note: Keep your API token secure. Do not share it or commit it to version contro
 
 ## TODOs
 
-- [x] Support multiple Jenkins environments
+- [x] Support multiple Jenkins services
 - [x] Support string and text parameter types
 - [x] Support choice parameter type
 - [x] Support boolean parameter type

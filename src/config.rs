@@ -64,10 +64,10 @@ pub async fn initialize_config() -> Result<()> {
     }
 
     let selected_config = if jenkins_config.len() > 1 {
-        let env_names: Vec<String> = jenkins_config.iter().map(|c| c.name.clone()).collect();
+        let service_names: Vec<String> = jenkins_config.iter().map(|c| c.name.clone()).collect();
         let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
-            .with_prompt(t!("select-jenkins-env"))
-            .items(&env_names)
+            .with_prompt(t!("select-jenkins"))
+            .items(&service_names)
             .default(0)
             .interact()
             .unwrap_or_else(|e| {
@@ -78,7 +78,7 @@ pub async fn initialize_config() -> Result<()> {
                     check_unsupported_terminal();
                     std::process::exit(0);
                 }
-                eprintln!("{}: {}", t!("select-jenkins-env-failed"), e);
+                eprintln!("{}: {}", t!("select-jenkins-failed"), e);
                 std::process::exit(1);
             });
         jenkins_config[selection].clone()

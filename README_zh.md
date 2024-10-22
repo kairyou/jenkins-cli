@@ -8,7 +8,7 @@
 
 - 快速高效部署 Jenkins 任务
 - 直接用命令行发布，提供实时控制台输出
-- 支持多环境配置，具备项目过滤功能
+- 支持多个 Jenkins 服务，支持项目过滤
 - 支持常见 Jenkins 操作（如触发构建）
 - 高性能且跨平台支持（Mac、Windows、Linux）
 - 支持记住上次构建参数，便于下次快速构建
@@ -49,7 +49,7 @@ jenkins
 
 该命令将：
 
-1. 提示选择一个环境（如果配置了多个环境）
+1. 提示选择一个 Jenkins 服务（如果配置了多个服务）
 2. 显示可用的项目列表
 3. 选择一个项目, 设置构建参数
 4. 触发构建并实时输出控制台日志
@@ -86,8 +86,8 @@ token = "your-api-token"
 - `config`: 全局配置部分
   - `locale`: 设置语言 (可选), 默认自动检测，例如 "zh-CN", "en-US"
   - `enable_history`: 记录上次的构建参数 (可选), 默认 true, 设置为 false 以禁用
-- `jenkins`: 环境配置部分 (支持多环境)
-  - `name`: 环境名称 (例如 "SIT", "UAT", "PROD")
+- `jenkins`: 服务配置部分 (支持多服务)
+  - `name`: Jenkins 服务名称 (例如 "SIT", "UAT", "PROD")
   - `url`: Jenkins 服务器地址
   - `user`: 你的 Jenkins User ID
   - `token`: 你的 Jenkins API token
@@ -121,7 +121,7 @@ Jenkins User ID 就是登录 Jenkins 网页界面的用户名。
 
 ## TODOs
 
-- [x] 支持多个 Jenkins 环境
+- [x] 支持多个 Jenkins 服务
 - [x] 支持 string 和 text 类型参数
 - [x] 支持 choice 类型参数
 - [x] 支持 boolean 类型参数
