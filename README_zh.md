@@ -63,6 +63,7 @@ jenkins
 [config]
 # locale = "en-US" # (可选), 默认自动检测，例如 zh-CN, en-US
 # enable_history = false # (可选), 默认 true
+# check_update = false # (可选), 默认 true
 
 [[jenkins]]
 name = "SIT"
@@ -86,6 +87,7 @@ token = "your-api-token"
 - `config`: 全局配置部分
   - `locale`: 设置语言 (可选), 默认自动检测，例如 "zh-CN", "en-US"
   - `enable_history`: 记录上次的构建参数 (可选), 默认 true, 设置为 false 以禁用
+  - `check_update`: 自动检查更新 (可选), 默认 true, 设置为 false 以禁用
 - `jenkins`: 服务配置部分 (支持多服务)
   - `name`: Jenkins 服务名称 (例如 "SIT", "UAT", "PROD")
   - `url`: Jenkins 服务器地址

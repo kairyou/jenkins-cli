@@ -27,7 +27,7 @@ mod utils;
 use crate::constants::{ParamType, MASKED_PASSWORD};
 use crate::i18n::macros::t;
 use crate::{
-    config::{initialize_config, CONFIG},
+    config::{initialize_config, select_jenkins_config, CONFIG},
     jenkins::{
         client::JenkinsClient,
         history::{History, HistoryEntry},
@@ -47,9 +47,6 @@ static LOADING: Lazy<std::sync::Arc<Mutex<bool>>> = Lazy::new(|| std::sync::Arc:
 
 #[tokio::main]
 async fn main() {
-    // async check update
-    tokio::spawn(check_update());
-
     let matches = Command::new("jenkins")
         .version(env!("CARGO_PKG_VERSION"))
         // .author("Your Name <your.email@example.com>")
@@ -80,8 +77,14 @@ async fn main() {
         )
         .get_matches();
     // check_unsupported_terminal();
-    initialize_config().await.unwrap();
+
+    let global_config = initialize_config().await.unwrap();
+    if global_config.check_update.unwrap_or(true) {
+        tokio::spawn(check_update()); // async check update
+    }
+    select_jenkins_config().await.unwrap();
     clear_screen();
+
     {
         let mut config = CONFIG.lock().await;
         if let Some(url) = matches.get_one::<String>("url") {
@@ -142,7 +145,8 @@ fn filter_projects(projects: Vec<jenkins::JenkinsJob>, config: &JenkinsConfig) -
 /// Main menu
 async fn menu() {
     let config = CONFIG.lock().await;
-    // println!("{}, {}, {}", config.url, config.user, config.token);
+    // println!("runtime_config: {:?}", config);
+
     let jenkins_config = &config.jenkins;
     let auth = format!("{}:{}", jenkins_config.user, jenkins_config.token);
     // let mut client = JenkinsClient::new(&config.url, &auth);
@@ -151,7 +155,6 @@ async fn menu() {
     // println!("config.url: {}", config.url); // client.read().await.base_url
     let mut history = History::new().unwrap();
     let enable_history = jenkins_config.enable_history.unwrap_or(true);
-    // println!("enable_history: {}", enable_history);
 
     // Spawn a task to listen for Ctrl+C
     let _ctrl_c_handler = {

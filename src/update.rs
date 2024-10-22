@@ -49,7 +49,7 @@ async fn perform_update_check() -> Option<String> {
     let time_until_next_check = {
         let base_time = CHECK_INTERVAL.saturating_sub(current_time.saturating_sub(last_check));
         if cfg!(debug_assertions) && FORCE_UPDATE_CHECK {
-            println!("Debug: Time until next check: {} seconds", base_time);
+            // println!("Debug: Time until next check: {} seconds", base_time);
             0
         } else {
             base_time
@@ -72,6 +72,7 @@ async fn perform_update_check() -> Option<String> {
 }
 
 fn display_update_notification(version: &str) {
+    println!();
     println!(
         "✨ {} ({})",
         t!("new-version-available", "version" => version.green()),

@@ -22,6 +22,7 @@ pub static CONFIG: Lazy<Mutex<RuntimeConfig>> = Lazy::new(|| {
     Mutex::new(RuntimeConfig {
         global: Some(GlobalConfig::default()),
         jenkins: JenkinsConfig::default(),
+        services: Vec::new(),
     })
 });
 
@@ -36,25 +37,17 @@ pub static DATA_DIR: Lazy<PathBuf> = Lazy::new(|| {
     data_dir
 });
 
-// let (global_config, jenkins_config) = CONFIG.lock().await;
-pub async fn initialize_config() -> Result<()> {
+pub async fn initialize_config() -> Result<GlobalConfig> {
     let _ = DATA_DIR.as_path(); // auto create data dir
 
-    let cfg = load_config().expect(&t!("load-config-failed"));
-    let global_config = cfg.config;
-    let jenkins_config = cfg.jenkins;
+    let file_config = load_config().expect(&t!("load-config-failed"));
+    let global_config = file_config.config.unwrap_or_default();
+    let jenkins_configs = file_config.jenkins;
 
-    let global_enable_history = match &global_config {
-        Some(config) => {
-            // println!("language: {:?}", global.locale);
-            apply_global_settings(config);
-            config.enable_history.unwrap_or(true)
-        }
-        None => true,
-    };
+    apply_global_settings(&global_config);
 
-    if jenkins_config.is_empty()
-        || jenkins_config
+    if jenkins_configs.is_empty()
+        || jenkins_configs
             .iter()
             .any(|c| c.url.is_empty() || c.user.is_empty() || c.token.is_empty())
     {
@@ -63,8 +56,23 @@ pub async fn initialize_config() -> Result<()> {
         std::process::exit(1);
     }
 
-    let selected_config = if jenkins_config.len() > 1 {
-        let service_names: Vec<String> = jenkins_config.iter().map(|c| c.name.clone()).collect();
+    let mut config = CONFIG.lock().await;
+    config.global = Some(global_config.clone());
+    config.services = jenkins_configs;
+
+    if !config.services.is_empty() {
+        config.jenkins = config.services[0].clone(); // 默认选择第一个服务
+    }
+
+    Ok(global_config)
+}
+
+pub async fn select_jenkins_config() -> Result<()> {
+    let mut config = CONFIG.lock().await;
+    let global_enable_history = config.global.as_ref().unwrap().enable_history.unwrap_or(true);
+
+    let selected_config = if config.services.len() > 1 {
+        let service_names: Vec<String> = config.services.iter().map(|c| c.name.clone()).collect();
         let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
             .with_prompt(t!("select-jenkins"))
             .items(&service_names)
@@ -81,19 +89,16 @@ pub async fn initialize_config() -> Result<()> {
                 eprintln!("{}: {}", t!("select-jenkins-failed"), e);
                 std::process::exit(1);
             });
-        jenkins_config[selection].clone()
+        config.services[selection].clone()
     } else {
-        jenkins_config[0].clone()
+        config.services[0].clone()
     };
+
     let enable_history = selected_config.enable_history.unwrap_or(global_enable_history);
 
-    let mut config = CONFIG.lock().await;
-    *config = RuntimeConfig {
-        global: global_config,
-        jenkins: JenkinsConfig {
-            enable_history: Some(enable_history),
-            ..selected_config
-        },
+    config.jenkins = JenkinsConfig {
+        enable_history: Some(enable_history),
+        ..selected_config
     };
 
     Ok(())

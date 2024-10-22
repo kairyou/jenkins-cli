@@ -11,11 +11,13 @@ pub struct FileConfig {
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct GlobalConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub log_level: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub locale: Option<String>, // display language
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub enable_history: Option<bool>, // enable history recording(build parameters)
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub log_level: Option<String>,
+    pub check_update: Option<bool>, // enable update check
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -38,7 +40,7 @@ pub struct JenkinsConfig {
 
 #[derive(Debug)]
 pub struct RuntimeConfig {
-    #[allow(dead_code)]
     pub global: Option<GlobalConfig>,
-    pub jenkins: JenkinsConfig,
+    pub jenkins: JenkinsConfig,       // current selected jenkins config
+    pub services: Vec<JenkinsConfig>, // all available jenkins configs
 }
