@@ -86,15 +86,17 @@ async fn main() {
     clear_screen();
 
     {
-        let mut config = CONFIG.lock().await;
-        if let Some(url) = matches.get_one::<String>("url") {
-            config.jenkins.url = url.to_string();
-        }
-        if let Some(user) = matches.get_one::<String>("user") {
-            config.jenkins.user = user.to_string();
-        }
-        if let Some(token) = matches.get_one::<String>("token") {
-            config.jenkins.token = token.to_string();
+        let mut config: tokio::sync::MutexGuard<'_, models::Config> = CONFIG.lock().await;
+        if let Some(jenkins) = config.jenkins.as_mut() {
+            ["url", "user", "token"]
+                .iter()
+                .filter_map(|&field| matches.get_one::<String>(field).map(|value| (field, value)))
+                .for_each(|(field, value)| match field {
+                    "url" => jenkins.url = value.to_string(),
+                    "user" => jenkins.user = value.to_string(),
+                    "token" => jenkins.token = value.to_string(),
+                    _ => {}
+                });
         }
     }
 
@@ -147,7 +149,7 @@ async fn menu() {
     let config = CONFIG.lock().await;
     // println!("runtime_config: {:?}", config);
 
-    let jenkins_config = &config.jenkins;
+    let jenkins_config = config.jenkins.as_ref().expect("Jenkins configuration not found");
     let auth = format!("{}:{}", jenkins_config.user, jenkins_config.token);
     // let mut client = JenkinsClient::new(&config.url, &auth);
     let (event_sender, mut event_receiver) = mpsc::channel::<Event>(100);

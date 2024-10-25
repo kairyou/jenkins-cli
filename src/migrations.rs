@@ -2,7 +2,6 @@ use crate::config::DATA_DIR;
 use crate::constants::ParamType;
 use crate::i18n::macros::t;
 use crate::jenkins::history::HISTORY_FILE;
-use crate::models::{FileConfig, JenkinsConfig};
 use anyhow::{Context, Result};
 use dirs::home_dir;
 use serde_json::json;
@@ -18,20 +17,58 @@ pub const CURRENT_HISTORY_VERSION: u32 = 1; // latest version
 /// Migrate config from yaml to toml
 pub fn migrate_config_yaml_to_toml(config_path: &PathBuf) -> Result<()> {
     let yaml_path = config_path.with_extension("yaml");
-    if yaml_path.exists() && !config_path.exists() {
-        let yml_content = fs::read_to_string(&yaml_path)?;
-        let config: Vec<JenkinsConfig> = serde_yaml::from_str(&yml_content)?;
-        let file_config = FileConfig {
-            config: None,
-            jenkins: config,
-        };
-        let content = format!(
-            "[config]\n# locale = \"en-US\"\n\n{}",
-            toml::to_string_pretty(&file_config)?
-        );
-        fs::write(config_path, content)?;
-        fs::rename(&yaml_path, yaml_path.with_extension("yaml.bak"))?;
+    if config_path.exists() {
+        return Ok(());
     }
+    if !yaml_path.exists() {
+        return Ok(());
+    }
+
+    let yml_content = fs::read_to_string(&yaml_path)?;
+    let yaml_value: YamlValue = serde_yaml::from_str(&yml_content)?;
+
+    // let config = json!({ "jenkins": configs });
+    // let toml_content = format!("[config]\n# locale = \"en-US\"\n\n{}", toml::to_string_pretty(&config)?);
+
+    let mut toml_content = String::from("[config]\n# locale = \"en-US\"\n\n");
+    if let YamlValue::Sequence(configs) = yaml_value {
+        for config in configs {
+            toml_content.push_str("[[jenkins]]\n");
+            // keep the order of the keys
+            if let YamlValue::Mapping(map) = config {
+                for (key, value) in map {
+                    if let Some(key_str) = key.as_str() {
+                        match value {
+                            YamlValue::String(s) => {
+                                let escaped = s.replace("\\", "\\\\").replace("\"", "\\\"");
+                                toml_content.push_str(&format!("{} = \"{}\"\n", key_str, escaped));
+                            }
+                            YamlValue::Sequence(seq) => {
+                                toml_content.push_str(&format!("{} = [", key_str));
+                                for (i, item) in seq.iter().enumerate() {
+                                    if i > 0 {
+                                        toml_content.push_str(", ");
+                                    }
+                                    if let Some(s) = item.as_str() {
+                                        let escaped = s.replace("\\", "\\\\").replace("\"", "\\\"");
+                                        toml_content.push_str(&format!("\"{}\"", escaped));
+                                    }
+                                }
+                                toml_content.push_str("]\n");
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+            toml_content.push('\n');
+        }
+    }
+
+    // println!("migrate_config_yaml_to_toml:\n{}", toml_content);
+    fs::write(config_path, toml_content)?;
+    fs::rename(&yaml_path, yaml_path.with_extension("yaml.bak"))?;
+
     Ok(())
 }
 

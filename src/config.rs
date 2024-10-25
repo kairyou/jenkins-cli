@@ -3,6 +3,8 @@ use colored::*;
 use dialoguer::{theme::ColorfulTheme, FuzzySelect};
 use dirs::home_dir;
 use once_cell::sync::Lazy;
+use serde_json::json;
+use serde_json::Value as JsonValue;
 use std::fs;
 use std::path::PathBuf;
 use tokio::sync::Mutex;
@@ -11,18 +13,18 @@ use crate::env_checks::check_unsupported_terminal;
 use crate::i18n::macros::t;
 use crate::i18n::I18n;
 use crate::migrations::migrate_config_yaml_to_toml;
-use crate::models::{FileConfig, GlobalConfig, JenkinsConfig, RuntimeConfig};
+use crate::models::{Config, GlobalConfig, JenkinsConfig};
 
 use crate::utils::clear_screen;
 
 pub const CONFIG_FILE: &str = ".jenkins.toml";
 pub const DATA_DIR_NAME: &str = ".jenkins-cli";
 
-pub static CONFIG: Lazy<Mutex<RuntimeConfig>> = Lazy::new(|| {
-    Mutex::new(RuntimeConfig {
+pub static CONFIG: Lazy<Mutex<Config>> = Lazy::new(|| {
+    Mutex::new(Config {
         global: Some(GlobalConfig::default()),
-        jenkins: JenkinsConfig::default(),
         services: Vec::new(),
+        jenkins: None,
     })
 });
 
@@ -41,8 +43,12 @@ pub async fn initialize_config() -> Result<GlobalConfig> {
     let _ = DATA_DIR.as_path(); // auto create data dir
 
     let file_config = load_config().expect(&t!("load-config-failed"));
-    let global_config = file_config.config.unwrap_or_default();
-    let jenkins_configs = file_config.jenkins;
+    let global_config = file_config["config"]
+        .as_object()
+        .map(|obj| serde_json::from_value(JsonValue::Object(obj.clone())).unwrap_or_default())
+        .unwrap_or_default();
+    let jenkins_configs: Vec<JenkinsConfig> =
+        serde_json::from_value(file_config["jenkins"].clone()).unwrap_or_default();
 
     apply_global_settings(&global_config);
 
@@ -61,7 +67,7 @@ pub async fn initialize_config() -> Result<GlobalConfig> {
     config.services = jenkins_configs;
 
     if !config.services.is_empty() {
-        config.jenkins = config.services[0].clone(); // 默认选择第一个服务
+        config.jenkins = Some(config.services[0].clone()); // default select first service
     }
 
     Ok(global_config)
@@ -96,10 +102,10 @@ pub async fn select_jenkins_config() -> Result<()> {
 
     let enable_history = selected_config.enable_history.unwrap_or(global_enable_history);
 
-    config.jenkins = JenkinsConfig {
+    config.jenkins = Some(JenkinsConfig {
         enable_history: Some(enable_history),
         ..selected_config
-    };
+    });
 
     Ok(())
 }
@@ -116,7 +122,7 @@ fn apply_global_settings(global_config: &GlobalConfig) {
 }
 
 /// Load or create the Jenkins configuration file
-fn load_config() -> Result<FileConfig, Box<dyn std::error::Error>> {
+fn load_config() -> Result<JsonValue, Box<dyn std::error::Error>> {
     let home_dir = home_dir().expect(&t!("get-home-dir-failed"));
     let config_path = home_dir.join(CONFIG_FILE);
     let _ = migrate_config_yaml_to_toml(&config_path);
@@ -132,11 +138,6 @@ token = ""
 # excludes = []
 "#;
 
-    // #[rustfmt::skip]
-    // println!("{}", toml::to_string_pretty(&Config {
-    //   config: None,
-    //   jenkins: vec![JenkinsConfig { name: "".to_string(), url: "".to_string(), user: "".to_string(), token: "".to_string(), includes: vec![], excludes: vec![], }] }) .unwrap()
-    // );
     // Create default configuration file
     if !config_path.exists() {
         fs::write(&config_path, content).expect(&t!("write-default-config-failed"));
@@ -144,13 +145,15 @@ token = ""
 
     println!("{}: '{}'", t!("config-file"), config_path.display());
     let content = fs::read_to_string(&config_path).expect(&t!("read-config-file-failed"));
-    // let config = toml::from_str(&content).expect(&t!("parse-config-file-failed"));
-    match toml::from_str::<FileConfig>(content.trim()) {
+    match toml::from_str::<JsonValue>(content.trim()) {
         Ok(config) => Ok(config),
         Err(_e) => {
             // println!("Failed to parse config file: {}", _e);
             // Err(anyhow::anyhow!(t!("parse-config-file-failed")).into())
-            Ok(FileConfig::default())
+            Ok(json!({
+                "config": {},
+                "jenkins": []
+            }))
         }
     }
 }

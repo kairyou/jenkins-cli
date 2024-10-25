@@ -1,11 +1,13 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize, Default)]
-pub struct FileConfig {
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct Config {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub config: Option<GlobalConfig>,
+    pub global: Option<GlobalConfig>, // global config(`config` @file)
     #[serde(default)]
-    pub jenkins: Vec<JenkinsConfig>,
+    pub services: Vec<JenkinsConfig>, // all jenkins services(`jenkins` @file)
+    #[serde(skip)]
+    pub jenkins: Option<JenkinsConfig>, // current selected jenkins service
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -36,11 +38,4 @@ pub struct JenkinsConfig {
     pub excludes: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub enable_history: Option<bool>, // override global setting
-}
-
-#[derive(Debug)]
-pub struct RuntimeConfig {
-    pub global: Option<GlobalConfig>,
-    pub jenkins: JenkinsConfig,       // current selected jenkins config
-    pub services: Vec<JenkinsConfig>, // all available jenkins configs
 }
