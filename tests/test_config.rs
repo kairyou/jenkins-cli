@@ -1,3 +1,4 @@
+use jenkins::config::CONFIG_FILE;
 use jenkins::migrations::migrate_config_yaml_to_toml;
 use std::fs;
 use tempfile::tempdir;
@@ -22,7 +23,7 @@ fn test_migrate_yaml_config_to_toml() {
     println!("yaml_content:\n{}", yaml_content);
 
     let temp_dir = tempdir().unwrap();
-    let config_path = temp_dir.path().join(".jenkins.toml");
+    let config_path = temp_dir.path().join(CONFIG_FILE);
     let yaml_path = config_path.with_extension("yaml");
     fs::write(&yaml_path, yaml_content).unwrap();
     // println!("yaml_path:\n{}", yaml_path.display());

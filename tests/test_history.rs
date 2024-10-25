@@ -11,6 +11,7 @@ fn setup_test_history() -> (History, tempfile::TempDir) {
     let history = History {
         entries: vec![],
         file_path,
+        version: None,
     };
     (history, temp_dir)
 }
@@ -136,9 +137,9 @@ fn test_migrate_history_v0_yaml() {
     let toml_content = toml::to_string(&json_value).unwrap();
     println!("test_migrate toml_content: `{}`", toml_content);
 
-    let file_history: FileHistory = toml::from_str(&toml_content).unwrap();
+    let history: History = toml::from_str(&toml_content).unwrap();
 
-    let entry = &file_history.entries[0];
+    let entry = &history.entries[0];
     println!("test_migrate params: {:?}", entry.params);
     assert_eq!(entry.name, "Job1");
     assert_eq!(entry.job_url, "http://example.com/job1");

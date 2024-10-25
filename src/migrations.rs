@@ -165,6 +165,7 @@ pub fn migrate_history() -> Result<()> {
     // TOML => JSON
     let mut json_value: JsonValue = toml::from_str(&content).context("Failed to parse TOML")?;
     let version = json_value.get("version").and_then(JsonValue::as_u64).unwrap_or(0);
+    // println!("migrate_history: version = {}", version);
 
     if version < CURRENT_HISTORY_VERSION as u64 {
         for v in version..CURRENT_HISTORY_VERSION as u64 {

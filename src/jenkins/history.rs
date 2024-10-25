@@ -12,6 +12,15 @@ use crate::utils::current_timestamp;
 
 pub const HISTORY_FILE: &str = "history.toml";
 
+#[derive(Debug, Serialize, Deserialize, Default)]
+pub struct History {
+    pub entries: Vec<HistoryEntry>,
+    #[serde(skip)]
+    pub file_path: PathBuf,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<u32>,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct HistoryEntry {
     pub job_url: String,
@@ -20,20 +29,6 @@ pub struct HistoryEntry {
     pub params: Option<HashMap<String, ParamInfo>>,
     pub created_at: Option<i64>,
     pub completed_at: Option<i64>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Default)]
-pub struct History {
-    pub entries: Vec<HistoryEntry>,
-    #[serde(skip)]
-    pub file_path: PathBuf,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct FileHistory {
-    pub entries: Vec<HistoryEntry>,
-    #[serde(default)]
-    pub version: u32,
 }
 
 impl History {
@@ -58,6 +53,7 @@ impl History {
         // println!("history_file: {:?}", file_path);
         let mut history = Self {
             entries: vec![],
+            version: Some(CURRENT_HISTORY_VERSION),
             file_path,
         };
 
@@ -85,9 +81,10 @@ impl History {
             .read_to_string(&mut content)
             .context("Failed to read file content")?;
         // println!("load_history: {}", content);
-        match toml::from_str::<FileHistory>(content.trim()) {
+        match toml::from_str::<History>(content.trim()) {
             Ok(file_history) => {
                 self.entries = file_history.entries;
+                self.version = file_history.version;
                 Ok(())
             }
             Err(_e) => {
@@ -107,11 +104,7 @@ impl History {
             .open(&self.file_path)
             .context("Failed to open history file for writing")?;
         let mut writer = BufWriter::new(file);
-        let file_history = &FileHistory {
-            version: CURRENT_HISTORY_VERSION,
-            entries: self.entries.clone(),
-        };
-        let content = toml::to_string(file_history).context("Failed to serialize history")?;
+        let content = toml::to_string(self).context("Failed to serialize history")?;
         writer
             .write_all(content.as_bytes())
             .context("Failed to write history to file")?;
