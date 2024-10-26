@@ -4,8 +4,6 @@ use colored::*;
 use dialoguer::{
     theme::ColorfulTheme,
     FuzzySelect,
-    // MultiSelect,
-    // Select,
 };
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -80,7 +78,9 @@ async fn main() {
 
     let global_config = initialize_config().await.unwrap();
     if global_config.check_update.unwrap_or(true) {
-        tokio::spawn(check_update()); // async check update
+        tokio::spawn(async {
+            check_update().await;
+        });
     }
     select_jenkins_config().await.unwrap();
     clear_screen();
