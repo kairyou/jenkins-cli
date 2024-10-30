@@ -1,10 +1,7 @@
 use chrono::{DateTime, Local};
 use clap::{Arg, Command};
 use colored::*;
-use dialoguer::{
-    theme::ColorfulTheme,
-    FuzzySelect,
-};
+use dialoguer::{theme::ColorfulTheme, FuzzySelect};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::sync::atomic;

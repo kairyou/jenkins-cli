@@ -44,7 +44,7 @@ winapi = { version = "0.3.9", features = ["wincon"] }
 tempfile = "3.12.0"
 
 [features]
-force_update_check = [] # force update check in debug mode
+# force_update_check = [] # cargo run --features "force_update_check" --
 
 [profile.dev]
 # opt-level = 1

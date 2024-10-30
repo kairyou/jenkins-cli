@@ -68,7 +68,7 @@ cargo add spinners # spinner
 
 ```bash
 cargo run --
-# cargo run --features "force_update_check" --
+# FORCE_UPDATE_CHECK=true cargo run --
 ```
 
 ### Build
@@ -146,3 +146,4 @@ ps aux | grep cargo | grep -v grep | awk '{print $2}' | xargs kill -9
 
 - `cfg!(target_os = "windows")` platform: windows/linux/macos
 
+- `#[cfg(feature = "force_update_check")]` / `[cfg(not(feature = "force_update_check"))]` features

@@ -2,6 +2,7 @@ use crate::config::DATA_DIR;
 use crate::i18n::macros::t;
 use colored::*;
 use semver::Version;
+use std::env;
 use std::fs;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -18,13 +19,8 @@ static UPDATE_AVAILABLE: AtomicBool = AtomicBool::new(false);
 static UPDATE_VERSION: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 static UPDATE_NOTIFIED: AtomicBool = AtomicBool::new(false);
 
-#[cfg(feature = "force_update_check")]
-const FORCE_UPDATE_CHECK: bool = true;
-#[cfg(not(feature = "force_update_check"))]
-const FORCE_UPDATE_CHECK: bool = false;
-
 fn is_debug_update() -> bool {
-    cfg!(debug_assertions) && FORCE_UPDATE_CHECK
+    cfg!(debug_assertions) && env::var("FORCE_UPDATE_CHECK").unwrap_or_default() == "true"
 }
 
 pub async fn check_update() {
