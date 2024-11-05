@@ -26,7 +26,7 @@ fn default_param_type() -> ParamType {
     ParamType::String
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct JenkinsJob {
     pub name: String,
     #[serde(rename = "displayName")]

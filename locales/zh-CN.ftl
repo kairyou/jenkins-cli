@@ -1,7 +1,8 @@
 select-project-prompt = 请选择要发布的项目
 select-project-failed = 选择项目失败
-get-project-failed = 获取项目失败
+get-projects-failed = 获取项目列表失败
 get-job-parameters-failed = 获取任务参数失败
+get-project-failed = 获取项目信息失败
 
 prompt-input = 请输入{$name}
 prompt-select = 请选择{$name}

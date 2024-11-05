@@ -22,7 +22,7 @@ mod utils;
 use crate::constants::{ParamType, MASKED_PASSWORD};
 use crate::i18n::macros::t;
 use crate::{
-    config::{initialize_config, select_jenkins_config, CONFIG},
+    config::{initialize_config, CONFIG},
     jenkins::{
         client::JenkinsClient,
         history::{History, HistoryEntry},
@@ -73,33 +73,14 @@ async fn main() {
         .get_matches();
     // check_unsupported_terminal();
 
-    let global_config = initialize_config().await.unwrap();
+    let global_config = initialize_config(&matches).await.unwrap();
     if global_config.check_update.unwrap_or(true) {
         tokio::spawn(async {
             check_update().await;
         });
     }
-    select_jenkins_config().await.unwrap();
+
     clear_screen();
-
-    {
-        let mut config: tokio::sync::MutexGuard<'_, models::Config> = CONFIG.lock().await;
-        if let Some(jenkins) = config.jenkins.as_mut() {
-            ["url", "user", "token"]
-                .iter()
-                .filter_map(|&field| matches.get_one::<String>(field).map(|value| (field, value)))
-                .for_each(|(field, value)| match field {
-                    "url" => jenkins.url = value.to_string(),
-                    "user" => jenkins.user = value.to_string(),
-                    "token" => jenkins.token = value.to_string(),
-                    _ => {}
-                });
-        }
-    }
-
-    // if let Some(config) = matches.get_one::<String>("config") {
-    //     println!("Config file used: {}", config);
-    // }
 
     // main logic
     menu().await;
@@ -144,13 +125,23 @@ fn filter_projects(projects: Vec<jenkins::JenkinsJob>, config: &JenkinsConfig) -
 /// Main menu
 async fn menu() {
     let config = CONFIG.lock().await;
-    // println!("runtime_config: {:?}", config);
+    // println!("runtime_config:\n{:?}\n{:?}", config.global, config.jenkins);
 
     let jenkins_config = config.jenkins.as_ref().expect("Jenkins configuration not found");
     let auth = format!("{}:{}", jenkins_config.user, jenkins_config.token);
+    let base_url = if jenkins_config.url.contains("/job/") {
+        jenkins_config
+            .url
+            .split("/job/")
+            .next()
+            .unwrap_or(&jenkins_config.url)
+            .to_string()
+    } else {
+        jenkins_config.url.clone()
+    };
     // let mut client = JenkinsClient::new(&config.url, &auth);
     let (event_sender, mut event_receiver) = mpsc::channel::<Event>(100);
-    let client = std::sync::Arc::new(tokio::sync::RwLock::new(JenkinsClient::new(&jenkins_config.url, &auth)));
+    let client = std::sync::Arc::new(tokio::sync::RwLock::new(JenkinsClient::new(&base_url, &auth)));
     // println!("config.url: {}", config.url); // client.read().await.base_url
     let mut history = History::new().unwrap();
     let enable_history = jenkins_config.enable_history.unwrap_or(true);
@@ -163,61 +154,12 @@ async fn menu() {
         })
     };
 
-    let projects: Vec<jenkins::JenkinsJob> = {
-        let client_guard = client.read().await;
-        match client_guard.get_projects().await {
-            Ok(projects) => projects,
-            Err(_e) => {
-                eprintln!("{}", t!("get-project-failed"));
-                return;
-            }
-        }
-    };
-    let mut projects = filter_projects(projects, jenkins_config);
-    // projects.iter().for_each(|project| println!("Name: {} ({})", project.display_name, project.name));
-
-    let latest_history = history.get_latest_history(Some(&jenkins_config.url));
-    let latest_index: usize = latest_history
-        .and_then(|entry| {
-            Some(entry.name.as_str()) // String => &str
-                .and_then(|entry_name| projects.iter().position(|p| p.name == entry_name))
-        })
-        .unwrap_or(0);
-    if latest_index != 0 && latest_index < projects.len() {
-        let latest_project = projects.remove(latest_index);
-        projects.insert(0, latest_project);
-    }
-    // println!("latest build: {}, {:?}", latest_index, latest_history);
-
-    // Select project
-    let project_names: Vec<String> = projects
-        .iter()
-        .map(|p| format!("{} ({})", p.display_name, p.name))
-        .collect();
-
-    notify_if_update_available(); // before select project
-
-    let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
-        .with_prompt(t!("select-project-prompt"))
-        .items(&project_names)
-        .default(0)
-        // .report(false) // Display the selected project
-        .vim_mode(true) // Esc, j|k
-        .with_initial_text("")
-        .interact()
-        .unwrap_or_else(|e| {
-            if e.to_string().contains("interrupted") {
-                std::process::exit(0);
-            }
-            eprintln!("{}: {}", t!("select-project-failed"), e);
-            std::process::exit(1);
-        });
-    // Get project parameters
-    let job = projects.get(selection).expect(&t!("get-project-failed"));
-
-    // println!("Selected project: {}", job.display_name.cyan().bold());
-    let job_url = format_url(&format!("{}/job/{}", jenkins_config.url, job.name));
-    // println!("{}", job_url.underline().blue());
+    let job = get_project(&client, jenkins_config, &mut history)
+        .await
+        .expect("Failed to get job info");
+    // println!("job: {:?}", job);
+    // let job_url = job.url;
+    let job_url = format_url(&format!("{}/job/{}", base_url, job.name));
 
     notify_if_update_available(); // before prompt params
 
@@ -303,10 +245,13 @@ async fn menu() {
 
     let queue_location = {
         let client_guard = client.read().await;
-        client_guard
-            .trigger_build(&job_url, user_params)
-            .await
-            .expect(&t!("trigger-build-failed"))
+        match client_guard.trigger_build(&job_url, user_params).await {
+            Ok(location) => location,
+            Err(e) => {
+                eprintln!("{}: {}", t!("trigger-build-failed"), e);
+                std::process::exit(1);
+            }
+        }
     };
 
     *LOADING.lock().await = true;
@@ -377,6 +322,79 @@ async fn menu() {
                 format_url(&format!("{}/consoleText", build_url)).underline().blue(),
             );
         }
+    }
+}
+
+/// Get project information from URL or selection
+async fn get_project(
+    client: &std::sync::Arc<tokio::sync::RwLock<JenkinsClient>>,
+    jenkins_config: &JenkinsConfig,
+    history: &mut History,
+) -> Result<jenkins::JenkinsJob, anyhow::Error> {
+    if jenkins_config.url.contains("/job/") {
+        match client.read().await.get_project(&jenkins_config.url).await {
+            Ok(job) => Ok(job),
+            Err(e) => {
+                // Err(anyhow::anyhow!("Failed to get job info: {}", e))
+                eprintln!("{}: {}", t!("get-project-failed"), e);
+                std::process::exit(1);
+            }
+        }
+    } else {
+        let projects: Vec<jenkins::JenkinsJob> = {
+            let client_guard = client.read().await;
+            match client_guard.get_projects().await {
+                Ok(projects) => projects,
+                Err(e) => {
+                    eprintln!("{}: {}", t!("get-projects-failed"), e);
+                    std::process::exit(1);
+                }
+            }
+        };
+        let mut projects = filter_projects(projects, jenkins_config);
+        // projects.iter().for_each(|project| println!("Name: {} ({})", project.display_name, project.name));
+
+        let latest_history = history.get_latest_history(Some(&jenkins_config.url));
+        let latest_index: usize = latest_history
+            .and_then(|entry| {
+                Some(entry.name.as_str()) // String => &str
+                    .and_then(|entry_name| projects.iter().position(|p| p.name == entry_name))
+            })
+            .unwrap_or(0);
+        if latest_index != 0 && latest_index < projects.len() {
+            let latest_project = projects.remove(latest_index);
+            projects.insert(0, latest_project);
+        }
+        // println!("latest build: {}, {:?}", latest_index, latest_history);
+
+        // Select project
+        let project_names: Vec<String> = projects
+            .iter()
+            .map(|p| format!("{} ({})", p.display_name, p.name))
+            .collect();
+
+        notify_if_update_available(); // before select project
+
+        let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
+            .with_prompt(t!("select-project-prompt"))
+            .items(&project_names)
+            .default(0)
+            // .report(false) // Display the selected project
+            .vim_mode(true) // Esc, j|k
+            .with_initial_text("")
+            .interact()
+            .unwrap_or_else(|e| {
+                if e.to_string().contains("interrupted") {
+                    std::process::exit(0);
+                }
+                eprintln!("{}: {}", t!("select-project-failed"), e);
+                std::process::exit(1);
+            });
+        // Get project parameters
+        let job = projects.get(selection).expect(&t!("select-project-failed"));
+
+        // println!("Selected project: {}", job.display_name.cyan().bold());
+        Ok(job.clone())
     }
 }
 

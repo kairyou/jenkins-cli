@@ -15,6 +15,7 @@ use crate::i18n::I18n;
 use crate::migrations::migrate_config_yaml_to_toml;
 use crate::models::{Config, GlobalConfig, JenkinsConfig};
 
+use crate::utils;
 use crate::utils::clear_screen;
 
 pub const CONFIG_FILE: &str = ".jenkins.toml";
@@ -39,7 +40,7 @@ pub static DATA_DIR: Lazy<PathBuf> = Lazy::new(|| {
     data_dir
 });
 
-pub async fn initialize_config() -> Result<GlobalConfig> {
+pub async fn initialize_config(matches: &clap::ArgMatches) -> Result<GlobalConfig> {
     let _ = DATA_DIR.as_path(); // auto create data dir
 
     let file_config = load_config().expect(&t!("load-config-failed"));
@@ -52,33 +53,86 @@ pub async fn initialize_config() -> Result<GlobalConfig> {
 
     apply_global_settings(&global_config);
 
-    if jenkins_configs.is_empty()
-        || jenkins_configs
-            .iter()
-            .any(|c| c.url.is_empty() || c.user.is_empty() || c.token.is_empty())
+    // println!("arg len: {}", std::env::args().len());
+    let url_arg = matches.get_one::<String>("url");
+    let cli_config = ["url", "user", "token"]
+        .iter()
+        .fold(JenkinsConfig::default(), |mut config, &field| {
+            if let Some(value) = matches.get_one::<String>(field) {
+                match field {
+                    "url" => config.url = value.to_string(),
+                    "user" => config.user = value.to_string(),
+                    "token" => config.token = value.to_string(),
+                    _ => {}
+                }
+            }
+            config
+        });
+
+    if url_arg.is_none()
+        && (jenkins_configs.is_empty()
+            || jenkins_configs
+                .iter()
+                .any(|c| c.url.is_empty() || c.user.is_empty() || c.token.is_empty()))
     {
         eprintln!("{}", t!("fill-required-config").yellow());
         println!("{}", t!("jenkins-login-instruction"));
         std::process::exit(1);
     }
 
-    let mut config = CONFIG.lock().await;
-    config.global = Some(global_config.clone());
-    config.services = jenkins_configs;
+    let need_select = {
+        let mut config = CONFIG.lock().await;
+        config.global = Some(global_config.clone());
+        config.services = jenkins_configs;
 
-    if !config.services.is_empty() {
-        config.jenkins = Some(config.services[0].clone()); // default select first service
+        match url_arg {
+            Some(url) => {
+                config.jenkins = Some(if config.services.is_empty() {
+                    cli_config.clone()
+                } else {
+                    let input_url = utils::simplify_url(url);
+                    let matched_config = config
+                        .services
+                        .iter()
+                        .find(|s| input_url == utils::simplify_url(&s.url))
+                        .cloned();
+                    match matched_config {
+                        Some(matched) => JenkinsConfig {
+                            user: if cli_config.user.is_empty() {
+                                matched.user
+                            } else {
+                                cli_config.user
+                            },
+                            token: if cli_config.token.is_empty() {
+                                matched.token
+                            } else {
+                                cli_config.token
+                            },
+                            ..matched
+                        },
+                        None => cli_config,
+                    }
+                });
+                false
+            }
+            None => !config.services.is_empty(),
+        }
+    };
+
+    if need_select {
+        select_jenkins_service().await?;
     }
 
     Ok(global_config)
 }
 
-pub async fn select_jenkins_config() -> Result<()> {
+pub async fn select_jenkins_service() -> Result<()> {
     let mut config = CONFIG.lock().await;
     let global_enable_history = config.global.as_ref().unwrap().enable_history.unwrap_or(true);
+    let services = config.services.clone();
 
-    let selected_config = if config.services.len() > 1 {
-        let service_names: Vec<String> = config.services.iter().map(|c| c.name.clone()).collect();
+    let selected_config = if services.len() > 1 {
+        let service_names: Vec<String> = services.iter().map(|c| c.name.clone()).collect();
         let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
             .with_prompt(t!("select-jenkins"))
             .items(&service_names)
@@ -95,13 +149,12 @@ pub async fn select_jenkins_config() -> Result<()> {
                 eprintln!("{}: {}", t!("select-jenkins-failed"), e);
                 std::process::exit(1);
             });
-        config.services[selection].clone()
+        services[selection].clone()
     } else {
-        config.services[0].clone()
+        services[0].clone()
     };
 
     let enable_history = selected_config.enable_history.unwrap_or(global_enable_history);
-
     config.jenkins = Some(JenkinsConfig {
         enable_history: Some(enable_history),
         ..selected_config

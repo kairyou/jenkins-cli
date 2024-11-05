@@ -1,7 +1,8 @@
 select-project-prompt = Please select a project to deploy
 select-project-failed = Failed to select project
-get-project-failed = Failed to get project
+get-projects-failed = Failed to get projects
 get-job-parameters-failed = Failed to get job parameters
+get-project-failed = Failed to get project info
 
 prompt-input = Please enter {$name}
 prompt-select = Please select {$name}

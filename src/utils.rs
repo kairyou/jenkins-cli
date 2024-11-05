@@ -7,11 +7,15 @@ use regex::Regex;
 use url::Url;
 
 use anyhow::{anyhow, Result};
+use once_cell::sync::Lazy;
 use std::{
     io::stdout,
     sync::atomic::{AtomicBool, Ordering},
     sync::Arc,
 };
+
+static PATH_SLASHES_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"/{2,}|/+$").unwrap());
+static PROTOCOL_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^https?://").unwrap());
 
 /// Clears the terminal screen.
 pub fn clear_screen() {
@@ -37,8 +41,7 @@ pub fn clear_previous_line() {
 pub fn format_url(url: &str) -> String {
     if let Ok(mut parsed_url) = Url::parse(url) {
         let path = parsed_url.path();
-        let re = Regex::new(r"/{2,}").unwrap();
-        let normalized_path = re.replace_all(path, "/").to_string();
+        let normalized_path = PATH_SLASHES_RE.replace_all(path, "/").to_string();
 
         parsed_url.set_path(&normalized_path);
 
@@ -46,6 +49,12 @@ pub fn format_url(url: &str) -> String {
     } else {
         url.to_string()
     }
+}
+
+/// Simplify URL by removing protocol and trailing slashes for matching
+pub fn simplify_url(url: &str) -> String {
+    // println!("simplify_url: {:?}", Url::parse(url));
+    PROTOCOL_RE.replace(url.trim_end_matches('/'), "").to_string()
 }
 
 /// get current unix timestamp

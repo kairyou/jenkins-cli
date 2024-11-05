@@ -25,13 +25,13 @@
 bash <(curl -fsSL https://raw.githubusercontent.com/kairyou/jenkins-cli/main/scripts/install.sh)
 ```
 
-或者使用 ghp.ci 镜像（如果 GitHub 无法访问）
+或使用 ghp.ci 镜像(如果无法访问 GitHub)
 
 ```bash
 bash <(curl -fsSL https://ghp.ci/raw.githubusercontent.com/kairyou/jenkins-cli/main/scripts/install.sh)
 ```
 
-如果已安装 Rust 和 Cargo，可以直接从 crates.io 安装 Jenkins CLI：
+如果已安装 Rust 和 Cargo，可以直接从 crates.io 安装：
 
 ```bash
 cargo install jenkins
@@ -41,7 +41,7 @@ cargo install jenkins
 
 ## 使用
 
-在设置好配置文件（见[配置](#configuration)部分）后，可以直接运行：
+在设置好配置文件（见[配置](#配置)部分）后，可以直接运行：
 
 ```bash
 jenkins
@@ -53,6 +53,21 @@ jenkins
 2. 显示可用的项目列表
 3. 选择一个项目, 设置构建参数
 4. 触发构建并实时输出控制台日志
+
+或使用命令行参数：
+
+```bash
+# 使用 Jenkins 项目地址运行 - 无需选择直接发布指定项目
+jenkins -U http://jenkins.example.com:8081/job/My-Job/ -u username -t api_token
+
+# 使用 Jenkins 服务器地址运行 - 显示项目列表选择并发布
+jenkins -U http://jenkins.example.com:8081 -u username -t api_token
+```
+
+可用的命令行选项：
+- `-U, --url <URL>`: Jenkins 服务器地址或项目 URL
+- `-u, --user <USER>`: Jenkins 用户名
+- `-t, --token <TOKEN>`: Jenkins API 令牌
 
 ## 配置
 
@@ -106,7 +121,7 @@ token = "your-api-token"
 
 注意：正则表达式模式默认区分大小写，除非另有指定（例如，使用 `(?i)` 进行不区分大小写的匹配）。
 
-### 用户名和 API 令牌
+### 用户和 API 令牌
 
 Jenkins User ID 就是登录 Jenkins 网页界面的用户名。
 
@@ -119,7 +134,7 @@ Jenkins User ID 就是登录 Jenkins 网页界面的用户名。
 5. 为你的令牌命名，然后点击"生成"
 6. 复制生成的令牌，并将其粘贴到你的`.jenkins.toml`文件中
 
-注意：请妥善保管你的 API 令牌。不要分享或将其提交到版本控制系统中。
+注意：请妥善保管你的 API 令牌。不要分享或将其提交到版本控制系统��。
 
 ## TODOs
 

@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use crate::config::DATA_DIR;
 use crate::jenkins::ParamInfo;
 use crate::migrations::{migrate_history, CURRENT_HISTORY_VERSION};
-use crate::utils::current_timestamp;
+use crate::utils::{self, current_timestamp};
 
 pub const HISTORY_FILE: &str = "history.toml";
 
@@ -35,6 +35,7 @@ impl History {
     /// Check if two history entries match
     #[doc(hidden)]
     fn matches_entry(entry: &HistoryEntry, info: &HistoryEntry) -> bool {
+        // println!("matches_entry: {:?}, {:?}", entry, info);
         entry.job_url == info.job_url && entry.name == info.name
     }
 
@@ -126,9 +127,10 @@ impl History {
     #[doc(hidden)]
     pub fn get_history(&self, info: &HistoryEntry, base_url: Option<&str>) -> Option<HistoryEntry> {
         // self.entries.iter().find(|e| Self::matches_entry(e, info)).cloned()
+        let input_url = utils::simplify_url(base_url.unwrap_or(""));
         self.entries
             .iter()
-            .filter(|e| base_url.map_or(true, |url| e.job_url.contains(url)))
+            .filter(|e| input_url.is_empty() || e.job_url.contains(&input_url))
             .find(|e| Self::matches_entry(e, info))
             .cloned()
     }

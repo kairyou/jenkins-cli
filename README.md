@@ -1,6 +1,6 @@
 # jenkins-cli
 
-A powerful and efficient Jenkins CLI tool written in Rust. Simplifies deployment of Jenkins jobs with an intuitive command-line experience.
+A powerful and efficient Jenkins CLI tool written in Rust. Simplifies deployment of Jenkins projects through command line.
 
 [中文文档](README_zh.md)
 
@@ -53,6 +53,21 @@ This command will:
 2. Display a list of available projects
 3. Select a project and set build parameters
 4. Trigger the build and show real-time console output
+
+You can also use command line arguments:
+
+```bash
+# Run with Jenkins project URL - Deploy project directly without selection
+jenkins -U http://jenkins.example.com:8081/job/My-Job/ -u username -t api_token
+
+# Run with Jenkins server URL - Show project list for selection and deploy
+jenkins -U http://jenkins.example.com:8081 -u username -t api_token
+```
+
+Available command line options:
+- `-U, --url <URL>`: Jenkins server URL or project URL
+- `-u, --user <USER>`: Jenkins username
+- `-t, --token <TOKEN>`: Jenkins API token
 
 ## Configuration
 

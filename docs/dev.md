@@ -68,6 +68,8 @@ cargo add spinners # spinner
 
 ```bash
 cargo run --
+cargo run -- -U http://test.example.com:8081 -u <username> -t <token>
+cargo run -- -U http://test.example.com:8081/job/CLI-Test-Job/ -u <username> -t <token>
 # FORCE_UPDATE_CHECK=true cargo run --
 ```
 
