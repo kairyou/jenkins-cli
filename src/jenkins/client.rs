@@ -84,14 +84,26 @@ impl JenkinsClient {
                 Ok(response)
             }
             Err(e) => {
-                if e.is_connect() {
-                    eprintln!("Connection error: {:?}", e);
-                } else if e.is_timeout() {
-                    eprintln!("Request timed out: {:?}", e);
-                } else if e.is_request() {
-                    eprintln!("Request error: {:?}", e);
+                let base_msg = format!("{:?}", e).replace("reqwest::Error ", "");
+                let error_msg = if let Some(source) = std::error::Error::source(&e) {
+                    let source_msg = source
+                        .source()
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| source.to_string());
+                    base_msg.replace(&format!("{:?}", source), &source_msg)
                 } else {
-                    eprintln!("Other error: {:?}", e);
+                    base_msg
+                };
+
+                // eprintln!("Error {:?}", e);
+                if e.is_connect() {
+                    eprintln!("Connection error: {}", error_msg);
+                } else if e.is_timeout() {
+                    eprintln!("Request timed out: {}", error_msg);
+                } else if e.is_request() {
+                    eprintln!("Request error: {}", error_msg);
+                } else {
+                    eprintln!("Other error: {}", error_msg);
                 }
                 Err(anyhow::anyhow!(e))
             }
@@ -579,6 +591,16 @@ impl JenkinsClient {
                 Err(e)
             }
         }
+    }
+    /// Get project info
+    pub async fn get_project(&self, job_url: &str) -> Result<JenkinsJob, Box<dyn std::error::Error>> {
+        let api_url = format_url(&format!("{}/api/json", job_url));
+        let headers = self.build_headers(None)?;
+        // println!("get_project: {}", url);
+        let result = self.client.get(&api_url).headers(headers).send().await;
+        let response = self.handle_response(result).await?;
+        let project: JenkinsJob = response.json().await?;
+        Ok(project)
     }
 }
 
