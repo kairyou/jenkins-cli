@@ -105,17 +105,16 @@ jobs:
           merge-multiple: true
       - name: List artifacts
         run: find artifacts -type f
+      # https://cli.github.com/manual/gh_release_delete
       - name: Delete existing release
-        uses: dev-drprasad/delete-tag-and-release@v1.1
-        with:
-          tag_name: ${{ github.ref_name }}
-          delete_release: true
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete ${{ github.ref_name }} --yes || true
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           files: artifacts/*
+          generate_release_notes: true
 # "Settings" > "Actions" > "General"
 # "Workflow permissions" > "Read and write permissions"
