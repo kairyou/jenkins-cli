@@ -129,8 +129,8 @@ To generate an API token:
 
 1. Log in to your Jenkins server
 2. Click on your name in the top right corner
-3. Click on "Configure" in the left sidebar
-4. In the API Token section, click "Add new Token"
+3. Click on `Configure` in the left sidebar
+4. In the `API Token` section, click `Add new Token`
 5. Give your token a name and click "Generate"
 6. Copy the generated token and paste it into your `.jenkins.toml` file
 
