@@ -157,9 +157,9 @@ async fn menu() {
     let job = get_project(&client, jenkins_config, &mut history)
         .await
         .expect("Failed to get job info");
-    // println!("job: {:?}", job);
-    // let job_url = job.url;
-    let job_url = format_url(&format!("{}/job/{}", base_url, job.name));
+    let relative_path = job.url.split("/job/").skip(1).collect::<Vec<&str>>().join("/job/");
+    let job_url = format_url(&format!("{}/job/{}", base_url, relative_path));
+    // println!("base_url: {}, job_url: {}, job: {:?}", base_url, job_url, job);
 
     notify_if_update_available(); // before prompt params
 
@@ -352,7 +352,7 @@ async fn get_project(
             }
         };
         let mut projects = filter_projects(projects, jenkins_config);
-        // projects.iter().for_each(|project| println!("Name: {} ({})", project.display_name, project.name));
+        // projects.iter().for_each(|project| println!("Name: {} ({})", project.display_name, project.url));
 
         let latest_history = history.get_latest_history(Some(&jenkins_config.url));
         let latest_index: usize = latest_history

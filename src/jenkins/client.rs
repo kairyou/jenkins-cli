@@ -9,7 +9,10 @@ use tokio::sync::mpsc;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, AUTHORIZATION};
 
 // use super::{JenkinsJob, JenkinsResponse, JenkinsJobConfig, JenkinsJobParameter};
-use crate::constants::{ParamType, DEFAULT_PARAM_VALUE, MASKED_PASSWORD};
+use crate::constants::{
+    ParamType, DEFAULT_PARAM_VALUE, JENKINS_AUTO_BUILD_TYPES, JENKINS_BUILDABLE_TYPES, JENKINS_FOLDER_TYPE,
+    MASKED_PASSWORD,
+};
 use crate::i18n::macros::t;
 use crate::{
     jenkins::{self, Event, JenkinsJob, JenkinsJobParameter, JenkinsResponse, ParamInfo},
@@ -146,10 +149,8 @@ impl JenkinsClient {
     ///
     /// A `Result` containing a vector of `JenkinsJob` or an `anyhow::Error` if the request fails.
     pub async fn get_projects(&self) -> Result<Vec<JenkinsJob>, anyhow::Error> {
-        let url = format_url(&format!(
-            "{}/api/json?tree=jobs[name,displayName,url]&pretty=false",
-            self.base_url
-        ));
+        let tree = Self::generate_tree_param(5);
+        let url = format_url(&format!("{}/api/json?tree={tree}&pretty=false", self.base_url));
         let headers = self.build_headers(None)?;
         // println!("{}, headers: {:?}", url, headers.clone());
         let result = self.client.get(&url).headers(headers).send().await;
@@ -157,7 +158,46 @@ impl JenkinsClient {
         let response = self.handle_response(result).await?;
         let json_response: JenkinsResponse = response.json().await?;
         // println!("get_projects: {:?}", json_response);
-        Ok(json_response.jobs)
+        fn extract_jobs(jobs: Vec<JenkinsJob>, parent_path: Option<&str>) -> Vec<JenkinsJob> {
+            let mut result = Vec::new();
+            for mut job in jobs {
+                match job._class.as_str() {
+                    // Buildable job types
+                    job_type if JENKINS_BUILDABLE_TYPES.contains(&job_type) => {
+                        if let Some(path) = parent_path {
+                            job.name = format!("{}/{}", path, job.name);
+                        }
+                        result.push(job);
+                    }
+                    // Folder type - recursively traverse jobs
+                    JENKINS_FOLDER_TYPE => {
+                        if let Some(sub_jobs) = job.jobs {
+                            let folder_path = parent_path.map_or(job.name.clone(), |p| format!("{}/{}", p, job.name));
+                            result.extend(extract_jobs(sub_jobs, Some(&folder_path)));
+                        }
+                    }
+                    // Skip auto-build job types
+                    job_type if JENKINS_AUTO_BUILD_TYPES.contains(&job_type) => {}
+                    // Skip other unknown types
+                    _ => {}
+                }
+            }
+            result
+        }
+
+        Ok(extract_jobs(json_response.jobs, None))
+    }
+    /// Generate the tree parameter for the Jenkins API
+    fn generate_tree_param(depth: usize) -> String {
+        fn build_tree(depth: usize, fields: &str) -> String {
+            if depth == 0 {
+                format!("[{fields}]")
+            } else {
+                format!("[{fields},jobs{}]", build_tree(depth - 1, fields))
+            }
+        }
+        let fields = "name,displayName,url,_class";
+        format!("jobs{}", build_tree(depth, fields))
     }
 
     /// Retrieves the parameters of a specific job from the Jenkins server.
@@ -419,7 +459,7 @@ impl JenkinsClient {
                         // if let Some(build_url) = executable["url"].as_str() // maybe domain is different
                         if let Some(number) = executable["number"].as_i64() {
                             let job_url = self.job_url.as_ref().unwrap();
-                            let build_url = format!("{}/{}", job_url, number);
+                            let build_url = format_url(&format!("{}/{}", job_url, number));
                             stop_once.call_once(|| {
                                 spinner.finish_with_message(format!("Build URL: {}", build_url.underline().blue()));
                             });

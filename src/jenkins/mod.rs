@@ -29,9 +29,15 @@ fn default_param_type() -> ParamType {
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct JenkinsJob {
     pub name: String,
+    // #[serde(rename = "fullName")]
+    // pub full_name: String, // folder/folder/test
     #[serde(rename = "displayName")]
     pub display_name: String,
+    // #[serde(rename = "fullDisplayName")]
+    // pub full_display_name: String, // folder » folder » test
     pub url: String,
+    pub _class: String,
+    pub jobs: Option<Vec<JenkinsJob>>,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
