@@ -1,3 +1,17 @@
+//! # Examples
+//! ```rust
+//! use jenkins::i18n::I18n;
+//! use jenkins::i18n::t;
+//!
+//! I18n::set_locale("zh-CN"); // Optional, set locale(default is system locale)
+//! println!("current locale: {}", I18n::locale());
+//! println!("available locales: {:?}", I18n::available_locales());
+//! println!("{}", t!("hello-world"));
+//! println!("{}", t!("welcome", "name" => "张三")); // with args
+//! println!("{}", t!("welcome", "name" => "Zhang San"; "en-US")); // Optional, get translation with specified locale
+//! ```
+//!
+
 use fluent::concurrent::FluentBundle;
 use fluent::{FluentArgs, FluentResource, FluentValue};
 use fluent_langneg::{negotiate_languages, LanguageIdentifier, NegotiationStrategy};
@@ -5,19 +19,6 @@ use once_cell::sync::Lazy;
 use rust_embed::RustEmbed;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
-
-/// # Examples
-/// ```rust
-/// use jenkins::i18n::I18n;
-/// use jenkins::i18n::t;
-///
-/// I18n::set_locale("zh-CN"); // Optional, set locale(default is system locale)
-/// println!("current locale: {}", I18n::locale());
-/// println!("available locales: {:?}", I18n::available_locales());
-/// println!("{}", t!("hello-world"));
-/// println!("{}", t!("welcome", "name" => "张三")); // with args
-/// println!("{}", t!("welcome", "name" => "Zhang San"; "en-US")); // Optional, get translation with specified locale
-/// ```
 
 /// Embed all localization resource files
 #[derive(RustEmbed)]
