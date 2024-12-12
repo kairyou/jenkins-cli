@@ -13,7 +13,7 @@ pub fn is_mintty() -> bool {
     false
 }
 
-/// Check if the current terminal is under winpty
+// /// Check if the current terminal is under winpty
 // #[allow(dead_code)]
 // pub fn is_under_winpty() -> bool {
 //     if let Ok(_wt) = env::var("WT_SESSION") {

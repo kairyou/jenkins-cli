@@ -6,7 +6,7 @@
 # install proto
 bash <(curl -fsSL https://moonrepo.dev/install/proto.sh)
 # install rust
-proto install rust
+proto install rust # rustup update stable
 # install cross
 cargo install cross
 
