@@ -1,6 +1,6 @@
 # jenkins-cli
 
-一个用 Rust 编写的强大高效的 Jenkins CLI 工具。通过命令行简化 Jenkins 的项目部署。
+跨平台的Jenkins构建触发工具，采用Rust开发以提供卓越性能。
 
 [English](README.md)
 

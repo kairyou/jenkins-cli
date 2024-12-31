@@ -1,6 +1,6 @@
 # jenkins-cli
 
-A powerful and efficient Jenkins CLI tool written in Rust. Simplifies deployment of Jenkins projects through command line.
+Cross-platform CLI tool for triggering Jenkins builds. Written in Rust for high performance.
 
 [中文文档](README_zh.md)
 
