@@ -7,7 +7,7 @@ use std::fs;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-const RELEASES_URL: &str = "https://ghp.ci/github.com/kairyou/jenkins-cli/releases/latest";
+const RELEASES_URL: &str = "https://ghfast.top/github.com/kairyou/jenkins-cli/releases/latest";
 pub const PROJECT_URL: &str = "https://github.com/kairyou/jenkins-cli";
 const CHECK_INTERVAL: u64 = 24 * 60 * 60; // 24 hours in seconds
 const UPDATE_CHECK_FILE: &str = "update_check";

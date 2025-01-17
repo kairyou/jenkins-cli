@@ -28,7 +28,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/kairyou/jenkins-cli/main/scr
 或使用 ghp.ci 镜像(如果无法访问 GitHub)
 
 ```bash
-bash <(curl -fsSL https://ghp.ci/raw.githubusercontent.com/kairyou/jenkins-cli/main/scripts/install.sh)
+bash <(curl -fsSL https://ghfast.top/raw.githubusercontent.com/kairyou/jenkins-cli/main/scripts/install.sh)
 ```
 
 如果已安装 Rust 和 Cargo，可以直接从 crates.io 安装：
@@ -147,6 +147,10 @@ Jenkins User ID 就是登录 Jenkins 网页界面的用户名。
 - [x] 记录上次选择的项目/构建参数
 - [x] i18n 支持 (fluent)
 - [x] 自动检查更新
+
+## Star 趋势
+
+[![Stargazers over time](https://starchart.cc/kairyou/jenkins-cli.svg?variant=adaptive)](https://starchart.cc/kairyou/jenkins-cli)
 
 ## 许可证
 

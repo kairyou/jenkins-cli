@@ -28,7 +28,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/kairyou/jenkins-cli/main/scr
 Or use ghp.ci mirror (if GitHub is inaccessible)
 
 ```bash
-bash <(curl -fsSL https://ghp.ci/raw.githubusercontent.com/kairyou/jenkins-cli/main/scripts/install.sh)
+bash <(curl -fsSL https://ghfast.top/raw.githubusercontent.com/kairyou/jenkins-cli/main/scripts/install.sh)
 ```
 
 If you have Rust and Cargo installed, you can install Jenkins CLI directly from crates.io:
@@ -147,6 +147,9 @@ Note: Keep your API token secure. Do not share it or commit it to version contro
 - [x] Remember last selected project and build parameters
 - [x] i18n support (fluent)
 - [x] Automatically check for updates
+
+## Stargazers over time
+[![Stargazers over time](https://starchart.cc/kairyou/jenkins-cli.svg?variant=adaptive)](https://starchart.cc/kairyou/jenkins-cli)
 
 ## License
 

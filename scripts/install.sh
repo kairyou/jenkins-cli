@@ -6,7 +6,7 @@ DISTRO=$( ([[ -e "/usr/bin/yum" ]] && echo 'CentOS') || ([[ -e "/usr/bin/apt" ]]
 
 IS_WINDOWS=$([[ "$OS" == "mingw"* || "$OS" == "msys"* || "$OS" == "cygwin"*  ]] && echo true || echo false)
 CLI_NAME="jenkins"
-GITHUB_MIRROR="https://ghp.ci/"
+GITHUB_MIRROR="https://ghfast.top/"
 
 cleanup() {
   [[ -f "$FILENAME" ]] && rm "$FILENAME"
