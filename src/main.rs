@@ -173,7 +173,7 @@ async fn menu() {
         Some(&jenkins_config.url),
     );
     // Use last build params
-    let use_previous_params = history_item.as_ref().map_or(false, |history| {
+    let use_previous_params = history_item.as_ref().is_some_and(|history| {
         let params = history.params.as_ref().unwrap();
         let datetime_str = history.created_at.map(|timestamp| {
             let utc_datetime = DateTime::from_timestamp(timestamp, 0).unwrap();

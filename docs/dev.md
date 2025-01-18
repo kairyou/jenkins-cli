@@ -6,7 +6,7 @@
 # install proto
 bash <(curl -fsSL https://moonrepo.dev/install/proto.sh)
 # install rust
-proto install rust # rustup update stable
+proto install rust
 # install cross
 cargo install cross
 
@@ -14,6 +14,8 @@ cargo install cross
 sudo apt install -y libssl-dev pkg-config
 
 # vscode rust-analyzer , dependi
+# rustup update stable
+# rustup default stable; rustc -V
 ```
 
 ### Initialize
