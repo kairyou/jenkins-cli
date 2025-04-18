@@ -145,7 +145,7 @@ impl History {
         let items = self
             .entries
             .iter()
-            .filter(|e| base_url.map_or(true, |url| e.job_url.contains(url)));
+            .filter(|e| base_url.is_none_or(|url| e.job_url.contains(url)));
         // println!("entries: {:?}", self.entries);
         items.max_by_key(|entry| entry.created_at)
     }

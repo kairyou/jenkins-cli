@@ -104,6 +104,7 @@ cargo build --target x86_64-unknown-linux-gnu --release # build for linux
 # cargo bloat --release --crates # cargo install cargo-bloat
 
 # = Release
+# rustup update stable
 cargo test -v --no-fail-fast # test
 cargo clippy # --fix --allow-dirty # Static code analysis - Check for potential errors/performance issues/code style
 cargo fmt -- --check # Check code formatting
