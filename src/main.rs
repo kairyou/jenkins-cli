@@ -1,4 +1,3 @@
-use chrono::{DateTime, Local};
 use clap::{Arg, Command};
 use colored::*;
 use dialoguer::{theme::ColorfulTheme, FuzzySelect};
@@ -19,7 +18,6 @@ mod update;
 mod utils;
 
 // use crate::i18n::I18n;
-use crate::constants::{ParamType, MASKED_PASSWORD};
 use crate::i18n::macros::t;
 use crate::{
     config::{initialize_config, CONFIG},
@@ -172,54 +170,30 @@ async fn menu() {
         },
         Some(&jenkins_config.url),
     );
-    // Use last build params
-    let use_previous_params = history_item.as_ref().is_some_and(|history| {
-        let params = history.params.as_ref().unwrap();
-        let datetime_str = history.created_at.map(|timestamp| {
-            let utc_datetime = DateTime::from_timestamp(timestamp, 0).unwrap();
-            // UTC => Local
-            let local_datetime = utc_datetime.with_timezone(&Local);
-            local_datetime.format("%Y-%m-%d %H:%M:%S").to_string()
-        });
-        println!(
-            "{}{}",
-            t!("last-build-params").bold(),
-            datetime_str.map_or("".to_string(), |dt| format!(" ({})", dt))
-        );
 
-        // println!("{:?}", params);
-        // println!("{}", serde_json::to_string_pretty(&serde_json::json!(params)).unwrap());
-        for (key, param_info) in params.iter() {
-            let display_value = if param_info.r#type == ParamType::Password {
-                MASKED_PASSWORD.to_string()
-            } else {
-                param_info.value.clone()
-            };
-            println!(" {}: {}", key.yellow(), display_value);
-        }
-        dialoguer::Confirm::with_theme(&ColorfulTheme::default())
-            .with_prompt(t!("use-last-build-params"))
-            .default(true)
-            .interact()
-            .unwrap_or_else(|_e| {
-                std::process::exit(0);
-            })
-    });
+    // Get current Jenkins Job parameters
+    let current_parameters = {
+        let mut client_guard = client.write().await; // write for set job_url
+        client_guard.job_url = Some(job_url.to_string());
+        client_guard
+            .get_job_parameters(&job_url)
+            .await
+            .expect(&t!("get-job-parameters-failed"))
+    };
+
+    // Use last build params
+    let use_previous_params = history
+        .should_use_history_parameters(&history_item, &current_parameters)
+        .await;
 
     let user_params = if use_previous_params {
-        // set self.job_url
         let mut client_guard = client.write().await;
         client_guard.job_url = Some(job_url.to_string());
-        history_item.unwrap().params.unwrap_or_default()
+
+        // merge history parameters with current parameters
+        History::merge_parameters(&history_item.unwrap(), &current_parameters)
     } else {
-        let params = {
-            let mut client_guard = client.write().await; // write for set job_url
-            client_guard
-                .get_job_parameters(&job_url)
-                .await
-                .expect(&t!("get-job-parameters-failed"))
-        };
-        JenkinsClient::prompt_job_parameters(params).await
+        JenkinsClient::prompt_job_parameters(current_parameters).await
     };
 
     // clear_screen();

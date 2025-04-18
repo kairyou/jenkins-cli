@@ -35,6 +35,8 @@ write-default-config-failed = Failed to write default configuration file
 
 last-build-params = Last build parameters
 use-last-build-params = Do you want to use the last build parameters?
+use-modified-last-build-params = Parameters changed. Use previous parameters anyway?
+params-changed-warning = The build parameters have changed
 update-history-failed = Failed to update history: {$error}
 trigger-build-failed = Failed to trigger build
 

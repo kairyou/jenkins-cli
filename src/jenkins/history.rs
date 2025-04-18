@@ -1,12 +1,16 @@
 use anyhow::{Context, Result};
+use chrono::{DateTime, Local};
+use colored::Colorize;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::PathBuf;
 
 use crate::config::DATA_DIR;
-use crate::jenkins::ParamInfo;
+use crate::constants::{ParamType, MASKED_PASSWORD};
+use crate::i18n::macros::t;
+use crate::jenkins::{JenkinsJobParameter, ParamInfo};
 use crate::migrations::{migrate_history, CURRENT_HISTORY_VERSION};
 use crate::utils::{self, current_timestamp};
 
@@ -156,5 +160,156 @@ impl History {
         } else {
             anyhow::bail!("Entry not found");
         }
+    }
+
+    /// Display parameter differences and ask user to confirm usage of previous parameters
+    pub async fn should_use_history_parameters(
+        &self,
+        history_item: &Option<HistoryEntry>,
+        current_parameters: &[JenkinsJobParameter],
+    ) -> bool {
+        let current_param_names: HashSet<String> = current_parameters.iter().map(|param| param.name.clone()).collect();
+
+        // create current parameter choices map, for checking if the choice value is still valid
+        let current_param_choices: HashMap<String, Option<Vec<String>>> = current_parameters
+            .iter()
+            .map(|param| (param.name.clone(), param.choices.clone()))
+            .collect();
+
+        history_item.as_ref().is_some_and(|history| {
+            let params = history.params.as_ref().unwrap();
+            let datetime_str = history.created_at.map(|timestamp| {
+                let utc_datetime = DateTime::from_timestamp(timestamp, 0).unwrap();
+                // UTC => Local
+                let local_datetime = utc_datetime.with_timezone(&Local);
+                local_datetime.format("%Y-%m-%d %H:%M:%S").to_string()
+            });
+
+            println!(
+                "{}{}",
+                t!("last-build-params").bold(),
+                datetime_str.map_or("".to_string(), |dt| format!(" ({})", dt))
+            );
+
+            // check if history parameters are consistent with current Jenkins config
+            let history_param_names: HashSet<String> = params.keys().cloned().collect();
+
+            // find new and missing parameters
+            let new_params: Vec<String> = current_param_names.difference(&history_param_names).cloned().collect();
+            let missing_params: Vec<String> = history_param_names.difference(&current_param_names).cloned().collect();
+
+            // check invalid choice values
+            let invalid_choices: Vec<String> = params
+                .iter()
+                .filter(|(_k, v)| v.r#type == ParamType::Choice)
+                .filter(|(k, v)| {
+                    if let Some(Some(choices)) = current_param_choices.get(k.as_str()) {
+                        !choices.contains(&v.value)
+                    } else {
+                        false
+                    }
+                })
+                .map(|(k, _)| k.clone())
+                .collect();
+
+            let has_param_changes = !new_params.is_empty() || !missing_params.is_empty() || !invalid_choices.is_empty();
+
+            // display parameter changes info
+            if has_param_changes {
+                println!("{}", t!("params-changed-warning").yellow());
+            }
+
+            // display history parameter values
+            for (key, param_info) in params.iter() {
+                let display_value = if param_info.r#type == ParamType::Password {
+                    MASKED_PASSWORD.to_string()
+                } else {
+                    param_info.value.clone()
+                };
+
+                if missing_params.contains(key) {
+                    // deleted parameter - whole line red
+                    println!("{} {}: {}", "-".red(), key.red().bold(), display_value.red());
+                } else if invalid_choices.contains(key) {
+                    // invalid choice value - whole line yellow + add mark
+                    println!(
+                        "{} {}: {} {}",
+                        "!".yellow(),
+                        key.yellow().bold(),
+                        display_value.yellow(),
+                        "<invalid>".yellow().italic()
+                    );
+                } else {
+                    // unchanged parameter
+                    println!("  {}: {}", key.bold(), display_value);
+                }
+            }
+
+            // add "+" prefix to new parameters - whole line green
+            for key in &new_params {
+                println!("{} {}: {}", "+".green(), key.green().bold(), "<new>".green().italic());
+            }
+
+            // if there are parameter changes, clearly inform the user
+            let prompt = if has_param_changes {
+                t!("use-modified-last-build-params")
+            } else {
+                t!("use-last-build-params")
+            };
+
+            dialoguer::Confirm::with_theme(&dialoguer::theme::ColorfulTheme::default())
+                .with_prompt(prompt)
+                .default(!has_param_changes) // when there are changes, default to no, otherwise default to yes
+                .interact()
+                .unwrap_or_else(|_e| {
+                    std::process::exit(0);
+                })
+        })
+    }
+
+    /// process history parameters and merge with latest config
+    pub fn merge_parameters(
+        history_item: &HistoryEntry,
+        current_parameters: &[JenkinsJobParameter],
+    ) -> HashMap<String, ParamInfo> {
+        let current_param_names: HashSet<String> = current_parameters.iter().map(|param| param.name.clone()).collect();
+
+        // merge history parameters with latest config
+        let mut merged_params = history_item.params.clone().unwrap_or_default();
+
+        // remove parameters that no longer exist
+        merged_params.retain(|key, _| current_param_names.contains(key));
+
+        // add new parameters (use default value)
+        for param in current_parameters {
+            if !merged_params.contains_key(&param.name) {
+                if let Some(default_value) = &param.default_value {
+                    merged_params.insert(
+                        param.name.clone(),
+                        ParamInfo {
+                            value: default_value.clone(),
+                            r#type: param.param_type.clone().unwrap_or(ParamType::String),
+                        },
+                    );
+                }
+            }
+        }
+
+        // fix invalid choice values
+        for param in current_parameters {
+            if let Some(choices) = &param.choices {
+                if let Some(param_info) = merged_params.get_mut(&param.name) {
+                    if param_info.r#type == ParamType::Choice && !choices.contains(&param_info.value) {
+                        // if history value is no longer valid, use default value or first option
+                        param_info.value = param
+                            .default_value
+                            .clone()
+                            .unwrap_or_else(|| choices.first().map_or(String::new(), |c| c.clone()));
+                    }
+                }
+            }
+        }
+
+        merged_params
     }
 }
