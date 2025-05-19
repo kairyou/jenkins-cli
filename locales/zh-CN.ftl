@@ -51,3 +51,7 @@ unsupported-terminal = 检测到不支持的终端，请检查终端设置。
 new-version-available = jenkins CLI 有新版本可用：{ $version }
 current-version = 当前版本：{ $version }
 update-instruction = 运行 `{ $command }` 或从 { $url } 安装
+
+# History cleanup messages
+history-cleanup = 自动清理失效历史({ $count }): { $names }
+history-cleanup-error = 清理历史记录失败: { $error }

@@ -51,3 +51,7 @@ unsupported-terminal = Unsupported terminal detected, please check your terminal
 new-version-available = A new version of jenkins CLI is available: { $version }
 current-version = Current version: { $version }
 update-instruction = Run `{ $command }` or install from { $url }
+
+# History cleanup messages
+history-cleanup = Auto removed invalid history ({ $count }): { $names }
+history-cleanup-error = History cleanup failed: { $error }

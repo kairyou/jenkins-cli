@@ -168,7 +168,7 @@ async fn menu() {
             job_url: job_url.clone(),
             ..Default::default()
         },
-        Some(&jenkins_config.url),
+        &jenkins_config.url,
     );
 
     // Get current Jenkins Job parameters
@@ -326,10 +326,25 @@ async fn get_project(
             }
         };
         let mut projects = filter_projects(projects, jenkins_config);
-        // projects.iter().for_each(|project| println!("Name: {} ({})", project.display_name, project.url));
+
+        // Clean up obsolete history entries
+        let project_names: Vec<String> = projects.iter().map(|p| p.name.clone()).collect();
+        match history.cleanup_obsolete_projects(&project_names, &jenkins_config.url) {
+            Ok(removed) => {
+                if !removed.is_empty() {
+                    println!(
+                        "{}",
+                        t!("history-cleanup", "count" => removed.len().to_string(), "names" => removed.join(", "))
+                    );
+                }
+            }
+            Err(e) => {
+                eprintln!("{}", t!("history-cleanup-error", "error" => e.to_string()));
+            }
+        }
 
         // Get recent histories and reorder projects based on them
-        let recent_histories = history.get_recent_histories(Some(&jenkins_config.url), Some(5));
+        let recent_histories = history.get_recent_histories(&jenkins_config.url, Some(5));
 
         // Promote recent projects to the front
         for history_entry in recent_histories.iter().rev() {

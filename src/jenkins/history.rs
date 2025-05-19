@@ -129,12 +129,12 @@ impl History {
 
     /// get the history item by the job_url and name
     #[doc(hidden)]
-    pub fn get_history(&self, info: &HistoryEntry, base_url: Option<&str>) -> Option<HistoryEntry> {
+    pub fn get_history(&self, info: &HistoryEntry, base_url: &str) -> Option<HistoryEntry> {
         // self.entries.iter().find(|e| Self::matches_entry(e, info)).cloned()
-        let input_url = utils::simplify_url(base_url.unwrap_or(""));
+        let input_url = utils::simplify_url(base_url);
         self.entries
             .iter()
-            .filter(|e| input_url.is_empty() || e.job_url.contains(&input_url))
+            .filter(|e| e.job_url.contains(&input_url))
             .find(|e| Self::matches_entry(e, info))
             .cloned()
     }
@@ -147,12 +147,10 @@ impl History {
 
     /// get recent history items sorted by timestamp (newest first)
     #[doc(hidden)]
-    pub fn get_recent_histories(&self, base_url: Option<&str>, limit: Option<usize>) -> Vec<&HistoryEntry> {
-        let mut items: Vec<&HistoryEntry> = self
-            .entries
-            .iter()
-            .filter(|e| base_url.is_none_or(|url| e.job_url.contains(url)))
-            .collect();
+    pub fn get_recent_histories(&self, base_url: &str, limit: Option<usize>) -> Vec<&HistoryEntry> {
+        let input_url = utils::simplify_url(base_url);
+
+        let mut items: Vec<&HistoryEntry> = self.entries.iter().filter(|e| e.job_url.contains(&input_url)).collect();
 
         // Sort by created_at (newest first)
         items.sort_by(|a, b| {
@@ -327,5 +325,27 @@ impl History {
         }
 
         merged_params
+    }
+
+    /// Clean up history entries for projects that no longer exist in the provided list
+    pub fn cleanup_obsolete_projects<T>(&mut self, existing_projects: &[T], base_url: &str) -> Result<Vec<String>>
+    where
+        T: AsRef<str>,
+    {
+        let set: HashSet<&str> = existing_projects.iter().map(|p| p.as_ref()).collect();
+        let input_url = utils::simplify_url(base_url);
+        let mut removed_names = Vec::new();
+        self.entries.retain(|entry| {
+            let url_matches = entry.job_url.contains(&input_url);
+            let keep = !url_matches || set.contains(entry.name.as_str());
+            if !keep {
+                removed_names.push(entry.name.clone());
+            }
+            keep
+        });
+        if !removed_names.is_empty() {
+            self.save_history()?;
+        }
+        Ok(removed_names)
     }
 }
