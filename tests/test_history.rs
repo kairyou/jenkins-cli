@@ -67,24 +67,33 @@ fn test_get_history() {
 #[test]
 fn test_get_latest_history() {
     let (mut history, _temp_dir) = setup_test_history();
-    let entry1 = HistoryEntry {
-        job_url: "http://example.com/job1".to_string(),
-        name: "Job1".to_string(),
-        created_at: Some(1000),
-        ..Default::default()
-    };
-    let entry2 = HistoryEntry {
-        job_url: "http://example.com/job2".to_string(),
-        name: "Job2".to_string(),
-        created_at: Some(2000),
-        ..Default::default()
-    };
-    history.upsert_history(&mut entry1.clone()).unwrap();
-    history.upsert_history(&mut entry2.clone()).unwrap();
-
-    let latest = history.get_latest_history(Some("http://example.com"));
-    assert!(latest.is_some());
-    assert_eq!(latest.unwrap().name, "Job2");
+    
+    // setup history entries
+    history.entries = vec![
+        HistoryEntry {
+            job_url: "http://example.com/job1".to_string(),
+            name: "Job1".to_string(),
+            created_at: Some(1000), // the older timestamp
+            ..Default::default()
+        },
+        HistoryEntry {
+            job_url: "http://example.com/job2".to_string(),
+            name: "Job2".to_string(),
+            created_at: Some(2000), // the newer timestamp
+            ..Default::default()
+        },
+    ];
+    
+    // get the latest history
+    let recent = history.get_recent_histories(Some("http://example.com"), Some(1));
+    assert!(!recent.is_empty());
+    assert_eq!(recent[0].name, "Job2");
+    
+    // test get multiple histories
+    let recent_multiple = history.get_recent_histories(Some("http://example.com"), Some(2));
+    assert_eq!(recent_multiple.len(), 2);
+    assert_eq!(recent_multiple[0].name, "Job2"); // the latest one is at the front
+    assert_eq!(recent_multiple[1].name, "Job1"); // the older one is at the back
 }
 
 #[test]

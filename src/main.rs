@@ -328,16 +328,18 @@ async fn get_project(
         let mut projects = filter_projects(projects, jenkins_config);
         // projects.iter().for_each(|project| println!("Name: {} ({})", project.display_name, project.url));
 
-        let latest_history = history.get_latest_history(Some(&jenkins_config.url));
-        let latest_index: usize = latest_history
-            .and_then(|entry| {
-                Some(entry.name.as_str()) // String => &str
-                    .and_then(|entry_name| projects.iter().position(|p| p.name == entry_name))
-            })
-            .unwrap_or(0);
-        if latest_index != 0 && latest_index < projects.len() {
-            let latest_project = projects.remove(latest_index);
-            projects.insert(0, latest_project);
+        // Get recent histories and reorder projects based on them
+        let recent_histories = history.get_recent_histories(Some(&jenkins_config.url), Some(5));
+
+        // Promote recent projects to the front
+        for history_entry in recent_histories.iter().rev() {
+            if let Some(position) = projects.iter().position(|p| p.name == history_entry.name) {
+                if position > 0 {
+                    // Remove the project and insert it at the front
+                    let project = projects.remove(position);
+                    projects.insert(0, project);
+                }
+            }
         }
         // println!("latest build: {}, {:?}", latest_index, latest_history);
 

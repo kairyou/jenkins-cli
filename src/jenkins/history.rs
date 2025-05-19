@@ -139,15 +139,31 @@ impl History {
             .cloned()
     }
 
-    /// get the latest history item
+    // /// get the latest history item
+    // #[doc(hidden)]
+    // pub fn get_latest_history(&self, base_url: Option<&str>) -> Option<&HistoryEntry> {
+    //     self.get_recent_histories(base_url, 1).first().copied()
+    // }
+
+    /// get recent history items sorted by timestamp (newest first)
     #[doc(hidden)]
-    pub fn get_latest_history(&self, base_url: Option<&str>) -> Option<&HistoryEntry> {
-        let items = self
+    pub fn get_recent_histories(&self, base_url: Option<&str>, limit: Option<usize>) -> Vec<&HistoryEntry> {
+        let mut items: Vec<&HistoryEntry> = self
             .entries
             .iter()
-            .filter(|e| base_url.is_none_or(|url| e.job_url.contains(url)));
-        // println!("entries: {:?}", self.entries);
-        items.max_by_key(|entry| entry.created_at)
+            .filter(|e| base_url.is_none_or(|url| e.job_url.contains(url)))
+            .collect();
+
+        // Sort by created_at (newest first)
+        items.sort_by(|a, b| {
+            let a_time = a.created_at.unwrap_or(0);
+            let b_time = b.created_at.unwrap_or(0);
+            b_time.cmp(&a_time) // reverse order (newest first)
+        });
+
+        limit.map(|len| items.truncate(len)).unwrap_or(());
+
+        items
     }
 
     pub fn update_field<F>(&mut self, info: &HistoryEntry, update_fn: F) -> Result<()>
