@@ -31,8 +31,6 @@ pub struct ClientConfig {
     // pub verify_ssl: Option<bool>,
 }
 
-
-
 /// Represents a Jenkins client.
 pub struct JenkinsClient {
     pub base_url: String,
@@ -140,7 +138,7 @@ impl JenkinsClient {
     pub fn new(base_url: &str, authorization: &str, config: Option<ClientConfig>) -> Self {
         let authorization = format!("Basic {}", STANDARD.encode(authorization));
         let timeout_secs = config.and_then(|c| c.timeout).unwrap_or(30);
-        
+
         // println!("Authorization: {}", authorization);
         // std::env::set_var("NO_PROXY", "jenkins.example.com,other.example.com"); // Bypass proxy
         let client = reqwest::Client::builder()
