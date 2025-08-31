@@ -20,6 +20,19 @@ use crate::{
     utils::{clear_previous_line, clear_screen, delay, format_url, get_current_branch, get_git_branches},
 };
 
+/// Configuration for the Jenkins client.
+#[derive(Debug, Clone)]
+pub struct ClientConfig {
+    /// HTTP request timeout in seconds (default: 30).
+    pub timeout: Option<u64>,
+    // example:
+    // pub max_retries: Option<u32>,
+    // pub proxy: Option<String>,
+    // pub verify_ssl: Option<bool>,
+}
+
+
+
 /// Represents a Jenkins client.
 pub struct JenkinsClient {
     pub base_url: String,
@@ -119,18 +132,21 @@ impl JenkinsClient {
     ///
     /// * `base_url` - The base URL of the Jenkins server.
     /// * `authorization` - The authorization token for accessing the Jenkins server.
+    /// * `config` - Client configuration options.
     ///
     /// # Returns
     ///
     /// A new instance of `JenkinsClient`.
-    pub fn new(base_url: &str, authorization: &str) -> Self {
+    pub fn new(base_url: &str, authorization: &str, config: Option<ClientConfig>) -> Self {
         let authorization = format!("Basic {}", STANDARD.encode(authorization));
+        let timeout_secs = config.and_then(|c| c.timeout).unwrap_or(30);
+        
         // println!("Authorization: {}", authorization);
         // std::env::set_var("NO_PROXY", "jenkins.example.com,other.example.com"); // Bypass proxy
         let client = reqwest::Client::builder()
             .danger_accept_invalid_certs(true) // Ignore SSL verification
             .no_proxy() // Ignore proxy to avoid potential DNS resolution failure
-            .timeout(std::time::Duration::from_secs(30))
+            .timeout(std::time::Duration::from_secs(timeout_secs))
             .user_agent("Jenkins CLI")
             .build()
             .expect("Failed to create reqwest client");

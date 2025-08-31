@@ -24,6 +24,7 @@ use crate::{
     jenkins::{
         client::JenkinsClient,
         history::{History, HistoryEntry},
+        ClientConfig,
         Event,
     },
     models::JenkinsConfig,
@@ -139,7 +140,13 @@ async fn menu() {
     };
     // let mut client = JenkinsClient::new(&config.url, &auth);
     let (event_sender, mut event_receiver) = mpsc::channel::<Event>(100);
-    let client = std::sync::Arc::new(tokio::sync::RwLock::new(JenkinsClient::new(&base_url, &auth)));
+    
+    // Create client configuration
+    let client_config = config.global.as_ref().and_then(|g| g.timeout).map(|timeout| ClientConfig {
+        timeout: Some(timeout),
+    });
+    
+    let client = std::sync::Arc::new(tokio::sync::RwLock::new(JenkinsClient::new(&base_url, &auth, client_config)));
     // println!("config.url: {}", config.url); // client.read().await.base_url
     let mut history = History::new().unwrap();
     let enable_history = jenkins_config.enable_history.unwrap_or(true);

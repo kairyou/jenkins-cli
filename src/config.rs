@@ -181,6 +181,9 @@ fn load_config() -> Result<JsonValue, Box<dyn std::error::Error>> {
     let _ = migrate_config_yaml_to_toml(&config_path);
     let content = r#"[config]
 # locale = "en-US"
+# enable_history = true
+# check_update = true
+# timeout = 30
 
 [[jenkins]]
 name = ""

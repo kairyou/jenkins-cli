@@ -20,6 +20,8 @@ pub struct GlobalConfig {
     pub enable_history: Option<bool>, // enable history recording(build parameters)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub check_update: Option<bool>, // enable update check
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout: Option<u64>, // HTTP request timeout in seconds, default 30
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]

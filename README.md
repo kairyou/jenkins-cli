@@ -79,6 +79,7 @@ Create a file named `.jenkins.toml` in your home directory with the following co
 # locale = "en-US" # (optional), default auto detect, e.g. zh-CN, en-US
 # enable_history = false # (optional), default true
 # check_update = false # (optional), default true
+# timeout = 30 # (optional), HTTP request timeout in seconds, default 30
 
 [[jenkins]]
 name = "SIT"
@@ -103,6 +104,7 @@ token = "your-api-token"
   - `locale`: Set language (optional), default auto detect, e.g. "zh-CN", "en-US"
   - `enable_history`: Remember last build parameters (optional), default true, set to false to disable
   - `check_update`: Automatically check for updates (optional), default true, set to false to disable
+  - `timeout`: HTTP request timeout in seconds (optional), default 30
 - `jenkins`: Service configuration section (supports multiple services)
   - `name`: Service name (e.g., "SIT", "UAT", "PROD")
   - `url`: Jenkins server URL
