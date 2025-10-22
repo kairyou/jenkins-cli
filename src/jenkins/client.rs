@@ -459,15 +459,22 @@ impl JenkinsClient {
         parameters: HashMap<String, ParamInfo>,
     ) -> Result<String, anyhow::Error> {
         // Triggering with format!("{}/build?delay=0sec", job_url) doesn't use a queue
-        let url = format_url(&format!("{}/buildWithParameters", job_url));
         let headers = self.build_headers(None)?;
-        // println!("{}, headers: {:?}, params: {:?}", url, headers.clone(), parameters);
-
         let params: HashMap<String, String> = parameters
             .into_iter()
             .filter(|(_, v)| v.value != DEFAULT_PARAM_VALUE)
             .map(|(k, v)| (k, v.value))
             .collect();
+
+        let url = format_url(&format!(
+            "{}/{}",
+            job_url,
+            if params.is_empty() {
+                "build"
+            } else {
+                "buildWithParameters"
+            }
+        ));
 
         let result = self.client.post(&url).headers(headers).form(&params).send().await;
         let response = self.handle_response(result).await?;
