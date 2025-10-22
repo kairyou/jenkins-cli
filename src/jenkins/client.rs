@@ -6,7 +6,10 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::mpsc;
 
-use reqwest::header::{HeaderMap, HeaderName, HeaderValue, AUTHORIZATION};
+use reqwest::{
+    header::{HeaderMap, HeaderName, HeaderValue, AUTHORIZATION},
+    StatusCode,
+};
 
 // use super::{JenkinsJob, JenkinsResponse, JenkinsJobConfig, JenkinsJobParameter};
 use crate::constants::{
@@ -231,10 +234,47 @@ impl JenkinsClient {
         let headers = self.build_headers(None)?;
         // println!("get_job: {}", url);
         let result = self.client.get(&url).headers(headers).send().await;
+
+        match result {
+            Ok(response) => {
+                let status = response.status();
+                if status.is_success() {
+                    let xml_response = response.text().await?;
+                    // println!("xml_response: {:?}", xml_response);
+                    let parameters = jenkins::parse_job_parameters_from_xml(&xml_response);
+                    // println!("parameters: {:?}", parameters);
+                    return Ok(parameters);
+                }
+
+                if status == StatusCode::FORBIDDEN {
+                    return self.fetch_job_parameters_from_api(job_url).await;
+                }
+
+                Err(self
+                    .handle_response(Ok(response))
+                    .await
+                    .err()
+                    .unwrap_or_else(|| anyhow!("Request failed")))
+            }
+            Err(error) => Err(self
+                .handle_response(Err(error))
+                .await
+                .err()
+                .unwrap_or_else(|| anyhow!("Request failed"))),
+        }
+    }
+
+    /// Fallback helper that reads parameter metadata via the Jenkins JSON API
+    /// when `/config.xml` is not accessible.
+    async fn fetch_job_parameters_from_api(&self, job_url: &str) -> Result<Vec<JenkinsJobParameter>, anyhow::Error> {
+        let tree = "property[_class,parameterDefinitions[name,description,defaultParameterValue[value],choices,trim,credentialType,required,projectName,filter,_class,type]]";
+        let api_url = format_url(&format!("{job_url}/api/json?tree={tree}"));
+        let headers = self.build_headers(None)?;
+        let result = self.client.get(&api_url).headers(headers).send().await;
         let response = self.handle_response(result).await?;
-        let xml_response = response.text().await?;
-        // println!("xml_response: {:?}", xml_response);
-        let parameters = jenkins::parse_jenkins_job_parameter(&xml_response);
+        let json_response: serde_json::Value = response.json().await?;
+        // println!("json_response: {:?}", json_response);
+        let parameters = jenkins::parse_job_parameters_from_json(&json_response);
         // println!("parameters: {:?}", parameters);
         Ok(parameters)
     }

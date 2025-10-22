@@ -1,12 +1,11 @@
-// use std::borrow::Cow;
-// use std::io::BufReader;
-use jenkins::jenkins::{
-    parse_jenkins_job_parameter,
-    // JenkinsJobParameter
+use jenkins::{
+    constants::DEFAULT_PARAM_VALUE,
+    jenkins::{parse_job_parameters_from_json, parse_job_parameters_from_xml},
 };
+use serde_json::json;
 
 #[test]
-fn main() {
+fn parse_parameters_from_xml() {
     let xml_data = r#"
         <flow-definition plugin="workflow-job@1308.v58d48a_763b_31">
             <properties>
@@ -65,7 +64,144 @@ fn main() {
         </flow-definition>
     "#;
 
-    // quick_xml::de::from_str::<JenkinsJobConfig>(xml_data).unwrap(); 解析array数据 可能有问题(choices 部分)
-    let parameters = parse_jenkins_job_parameter(xml_data);
-    println!("{:#?}", parameters);
+    let parameters = parse_job_parameters_from_xml(xml_data);
+
+    assert_eq!(parameters.len(), 5);
+    assert_eq!(parameters[0].name, "Git_Branch");
+    assert_eq!(parameters[0].default_value.as_deref(), Some("master"));
+    assert_eq!(parameters[0].trim, Some(true));
+
+    assert_eq!(parameters[1].choices.as_ref().map(|v| v.len()), Some(2));
+
+    let password_param = parameters
+        .iter()
+        .find(|param| param.name == "Password test")
+        .expect("password param exists");
+    assert_eq!(password_param.default_value.as_deref(), Some(DEFAULT_PARAM_VALUE));
+}
+
+#[test]
+fn parse_parameters_from_json() {
+    let json_data = json!({
+        "property": [
+            {
+                "_class": "hudson.model.ParametersDefinitionProperty",
+                "parameterDefinitions": [
+                    {
+                        "_class": "hudson.model.StringParameterDefinition",
+                        "defaultParameterValue": {
+                            "_class": "hudson.model.StringParameterValue",
+                            "value": "main"
+                        },
+                        "description": "git branch",
+                        "name": "GIT_BRANCH",
+                        "type": "StringParameterDefinition"
+                    },
+                    {
+                        "_class": "hudson.model.PasswordParameterDefinition",
+                        "defaultParameterValue": {
+                            "_class": "hudson.model.PasswordParameterValue"
+                        },
+                        "description": "password parameter test",
+                        "name": "PASSWORD",
+                        "type": "PasswordParameterDefinition"
+                    },
+                    {
+                        "_class": "hudson.model.FileParameterDefinition",
+                        "name": "FILE_UPLOAD",
+                        "type": "FileParameterDefinition"
+                    },
+                    {
+                        "_class": "hudson.model.ChoiceParameterDefinition",
+                        "defaultParameterValue": {
+                            "_class": "hudson.model.StringParameterValue",
+                            "value": "sit"
+                        },
+                        "description": "app",
+                        "name": "APP_ENV",
+                        "type": "ChoiceParameterDefinition",
+                        "choices": [
+                            "sit",
+                            "uat",
+                            "prod"
+                        ]
+                    },
+                    {
+                        "_class": "hudson.model.BooleanParameterDefinition",
+                        "defaultParameterValue": {
+                            "_class": "hudson.model.BooleanParameterValue",
+                            "value": true
+                        },
+                        "description": "is debug",
+                        "name": "IS_DEBUG",
+                        "type": "BooleanParameterDefinition"
+                    },
+                    {
+                        "_class": "hudson.model.TextParameterDefinition",
+                        "defaultParameterValue": {
+                            "_class": "hudson.model.TextParameterValue",
+                            "value": "aa\nbb"
+                        },
+                        "description": null,
+                        "name": "Multi-line",
+                        "type": "TextParameterDefinition"
+                    },
+                    {
+                        "_class": "com.cloudbees.plugins.credentials.CredentialsParameterDefinition",
+                        "defaultParameterValue": {
+                            "_class": "com.cloudbees.plugins.credentials.CredentialsParameterValue"
+                        },
+                        "description": null,
+                        "name": "Credentials",
+                        "type": "CredentialsParameterDefinition"
+                    },
+                    {
+                        "_class": "hudson.model.RunParameterDefinition",
+                        "name": "RUN_BUILD",
+                        "type": "RunParameterDefinition",
+                        "projectName": "example-job"
+                    }
+                ]
+            }
+        ]
+    });
+
+    let parameters = parse_job_parameters_from_json(&json_data);
+    // FILE_UPLOAD, Credentials and RUN_BUILD should be filtered out.
+    assert_eq!(parameters.len(), 5);
+
+    let string_param = parameters
+        .iter()
+        .find(|param| param.name == "GIT_BRANCH")
+        .expect("string param exists");
+    assert_eq!(string_param.default_value.as_deref(), Some("main"));
+
+    let password_param = parameters
+        .iter()
+        .find(|param| param.name == "PASSWORD")
+        .expect("password param exists");
+    assert_eq!(password_param.default_value.as_deref(), Some(DEFAULT_PARAM_VALUE));
+
+    let text_param = parameters
+        .iter()
+        .find(|param| param.name == "Multi-line")
+        .expect("text param exists");
+    assert_eq!(text_param.default_value.as_deref(), Some("aa\nbb"));
+    assert_eq!(text_param.trim, None);
+
+    let choice_param = parameters
+        .iter()
+        .find(|param| param.name == "APP_ENV")
+        .expect("choice param exists");
+    assert_eq!(choice_param.choices.as_ref().map(|choices| choices.len()), Some(3));
+
+    let boolean_param = parameters
+        .iter()
+        .find(|param| param.name == "IS_DEBUG")
+        .expect("boolean param exists");
+    assert_eq!(boolean_param.default_value.as_deref(), Some("true"));
+
+    assert!(parameters.iter().all(|param| param.name != "Credentials"));
+    assert!(parameters.iter().all(|param| param.name != "RUN_BUILD"));
+    assert!(parameters.iter().all(|param| param.name != "FILE_UPLOAD"));
 }
