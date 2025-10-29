@@ -20,6 +20,7 @@ fn parse_parameters_from_xml() {
                             <name>APP_ENV</name>
                             <choices class="java.util.Arrays$ArrayList">
                                 <a class="string-array">
+                                    <string/>
                                     <string>sit</string>
                                     <string>uat</string>
                                 </a>
@@ -71,7 +72,9 @@ fn parse_parameters_from_xml() {
     assert_eq!(parameters[0].default_value.as_deref(), Some("master"));
     assert_eq!(parameters[0].trim, Some(true));
 
-    assert_eq!(parameters[1].choices.as_ref().map(|v| v.len()), Some(2));
+    let choice_values = parameters[1].choices.as_ref().expect("choice values exist");
+    assert_eq!(choice_values.len(), 3);
+    assert_eq!(choice_values[0], "");
 
     let password_param = parameters
         .iter()

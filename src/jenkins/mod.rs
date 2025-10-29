@@ -153,10 +153,21 @@ pub fn parse_job_parameters_from_xml(xml_data: &str) -> Vec<JenkinsJobParameter>
                 }
                 b"string" => {
                     if inside_choices {
-                        if let Ok(Event::Text(e)) = reader.read_event_into(&mut buf) {
-                            choices.push(extract_text(e));
-                        }
+                        let choice = match reader.read_event_into(&mut buf) {
+                            Ok(Event::Text(e)) => extract_text(e), // regular <string>value</string>
+                            Ok(Event::End(ref end)) if end.name().as_ref() == b"string" => String::new(), // handles empty <string></string>
+                            Ok(Event::Eof) => break, // stop on unexpected EOF
+                            Ok(_) => String::new(),
+                            Err(e) => panic!("Error: {:?}", e),
+                        };
+                        choices.push(choice);
                     }
+                }
+                _ => {}
+            },
+            Ok(Event::Empty(ref e)) => match e.name().as_ref() {
+                b"string" if inside_choices => {
+                    choices.push(String::new()); // handles self-closing <string/>
                 }
                 _ => {}
             },
