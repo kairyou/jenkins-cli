@@ -27,7 +27,7 @@ use crate::{
         ClientConfig, Event,
     },
     models::JenkinsConfig,
-    update::{check_update, notify_if_update_available},
+    update::{check_update, notify_if_update_available, precheck_update_status},
     utils::{clear_screen, current_timestamp, delay, flush_stdin, format_url},
 };
 
@@ -71,14 +71,19 @@ async fn main() {
         .get_matches();
     // check_unsupported_terminal();
 
+    precheck_update_status();
+    notify_if_update_available(); // before loading config
+
     let global_config = initialize_config(&matches).await.unwrap();
-    if global_config.check_update.unwrap_or(true) {
+    let should_check_update = global_config.check_update.unwrap_or(true);
+
+    clear_screen();
+
+    if should_check_update {
         tokio::spawn(async {
             check_update().await;
         });
     }
-
-    clear_screen();
 
     // main logic
     menu().await;

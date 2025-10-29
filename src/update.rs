@@ -46,37 +46,14 @@ pub async fn check_update() {
         eprintln!("Failed to save update check time: {}", e);
     }
 
-    let (cache_check, online_check) = tokio::join!(
-        tokio::spawn(async {
-            // println!("cache_check");
-            load_version_cache().and_then(|cached_version| {
-                if is_debug_update() {
-                    println!("cache_check version: {}", cached_version);
-                }
-                compare_versions(&cached_version, CURRENT_VERSION)
-            })
-        }),
-        tokio::spawn(async {
-            // println!("online_check");
-            match get_latest_version().await {
-                Ok(Some(version)) => {
-                    if is_debug_update() {
-                        println!("online_check version: {}", version);
-                    }
-                    save_version_cache(&version);
-                    compare_versions(&version, CURRENT_VERSION)
-                }
-                _ => None,
-            }
-        })
-    );
-
-    let update_result = cache_check.unwrap_or(None).or(online_check.unwrap_or(None));
-
-    if let Some(version) = update_result {
-        // println!("update_result: {}", version);
-        UPDATE_AVAILABLE.store(true, Ordering::Relaxed);
-        UPDATE_VERSION.set(version).ok();
+    if let Ok(Some(version)) = get_latest_version().await {
+        if is_debug_update() {
+            println!("online_check version: {}", version);
+        }
+        save_version_cache(&version);
+        if compare_versions(&version, CURRENT_VERSION).is_some() {
+            mark_update_available(&version);
+        }
     }
 }
 
@@ -137,7 +114,10 @@ fn save_version_cache(version: &str) {
 }
 
 fn load_version_cache() -> Option<String> {
-    fs::read_to_string(DATA_DIR.join(VERSION_CACHE_FILE)).ok()
+    fs::read_to_string(DATA_DIR.join(VERSION_CACHE_FILE))
+        .ok()
+        .map(|content| content.trim().to_string())
+        .filter(|content| !content.is_empty())
 }
 
 async fn get_latest_version() -> Result<Option<String>, reqwest::Error> {
@@ -175,6 +155,24 @@ async fn get_latest_version() -> Result<Option<String>, reqwest::Error> {
 
 fn is_valid_version(version: &str) -> bool {
     Version::parse(version).is_ok()
+}
+
+/// Pre-check the cached version so we can notify before network I/O.
+pub fn precheck_update_status() {
+    if let Some(cached_version) = load_version_cache() {
+        if is_debug_update() {
+            println!("cache_check version: {}", cached_version);
+        }
+        if let Some(version) = compare_versions(&cached_version, CURRENT_VERSION) {
+            mark_update_available(&version);
+        }
+    }
+}
+
+/// Store the detected version for later notification
+fn mark_update_available(version: &str) {
+    UPDATE_AVAILABLE.store(true, Ordering::Relaxed);
+    let _ = UPDATE_VERSION.set(version.to_string());
 }
 
 pub fn get_command() -> String {
