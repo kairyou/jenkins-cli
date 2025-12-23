@@ -114,6 +114,9 @@ token = "your-api-token"
   - `url`: Jenkins server URL
   - `user`: Your Jenkins user ID
   - `token`: Your Jenkins API token
+  - `includes`: List of strings or regex patterns to include projects (optional)
+  - `excludes`: List of strings or regex patterns to exclude projects (optional)
+  - `enable_history`: Remember build parameters (optional), overrides global setting if specified
   - `cookie`: Optional, Jenkins auth cookie (e.g. jwt_token=...). Use only if API tokens are not accepted.
   - `cookie_refresh`: Optional, cookie auto-update configuration (updates the `cookie` value)
     - `url`: Refresh endpoint URL
@@ -126,9 +129,6 @@ token = "your-api-token"
       - `body.json:<path>`: JSON body path, e.g. `body.json:data.refreshToken`
       - `header:<name>`: Response header name, e.g. `header:X-JWT-Token`
       - `body.regex:<pattern>`: Regex against response body, use capture group 1, e.g. `body.regex:token=([\\w.-]+)`
-  - `includes`: List of strings or regex patterns to include projects (optional)
-  - `excludes`: List of strings or regex patterns to exclude projects (optional)
-  - `enable_history`: Remember build parameters (optional), overrides global setting if specified
 
 ### Cookie Authentication (Optional)
 

@@ -114,6 +114,9 @@ token = "your-api-token"
   - `url`: Jenkins 服务器地址
   - `user`: 你的 Jenkins User ID
   - `token`: 你的 Jenkins API token
+  - `includes`: 包含项目的字符串或正则表达式列表 (可选)
+  - `excludes`: 排除项目的字符串或正则表达式列表 (可选)
+  - `enable_history`: 记录上次的构建参数 (可选), 设置后覆盖全局设置
   - `cookie`: 可选，Jenkins 认证 Cookie（如 jwt_token=...）。仅在不支持 API Token 时使用。
   - `cookie_refresh`: 可选，Cookie 自动更新配置（用于更新 `cookie` 值）
     - `url`: 刷新接口地址
@@ -126,9 +129,6 @@ token = "your-api-token"
       - `body.json:<path>`：JSON body 路径，例如 `body.json:data.refreshToken`
       - `header:<name>`：响应头名称，例如 `header:X-JWT-Token`
       - `body.regex:<pattern>`：对响应 body 使用正则，取第 1 个分组，例如 `body.regex:token=([\\w.-]+)`
-  - `includes`: 包含项目的字符串或正则表达式列表 (可选)
-  - `excludes`: 排除项目的字符串或正则表达式列表 (可选)
-  - `enable_history`: 记录上次的构建参数 (可选), 设置后覆盖全局设置
 
 ### Cookie 认证（可选）
 
