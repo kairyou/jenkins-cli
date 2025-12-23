@@ -23,8 +23,8 @@ cancel-build-error = 取消构建失败: {$error}
 bye = Bye!
 
 load-config-failed = 加载配置失败
-fill-required-config = 请填写必要的配置信息 (url, user, token)
-jenkins-login-instruction = 登录Jenkins,点击右上角头像获取User ID并生成API Token
+fill-required-config = 请填写必要的配置信息 (url + (user & token) 或 cookie)
+jenkins-login-instruction = 登录Jenkins,点击右上角头像获取User ID并生成API Token，或提供可用的认证 Cookie
 select-jenkins = 请选择Jenkins服务
 select-jenkins-failed = 选择Jenkins服务失败
 get-home-dir-failed = 获取主目录失败

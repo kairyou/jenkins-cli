@@ -68,6 +68,14 @@ async fn main() {
                 .help("Sets the Jenkins API Token")
                 .required(false),
         )
+        .arg(
+            Arg::new("cookie")
+                .short('c')
+                .long("cookie")
+                .value_name("COOKIE")
+                .help("Sets the Jenkins auth cookie (e.g. jwt_token=...)")
+                .required(false),
+        )
         .get_matches();
     // check_unsupported_terminal();
 
@@ -131,7 +139,11 @@ async fn menu() {
     // println!("runtime_config:\n{:?}\n{:?}", config.global, config.jenkins);
 
     let jenkins_config = config.jenkins.as_ref().expect("Jenkins configuration not found");
-    let auth = format!("{}:{}", jenkins_config.user, jenkins_config.token);
+    let auth = if jenkins_config.user.is_empty() || jenkins_config.token.is_empty() {
+        None
+    } else {
+        Some(format!("{}:{}", jenkins_config.user, jenkins_config.token))
+    };
     let base_url = if jenkins_config.url.contains("/job/") {
         jenkins_config
             .url
@@ -154,7 +166,13 @@ async fn menu() {
 
     let client = std::sync::Arc::new(tokio::sync::RwLock::new(JenkinsClient::new(
         &base_url,
-        &auth,
+        auth.as_deref(),
+        if jenkins_config.cookie.is_empty() {
+            None
+        } else {
+            Some(jenkins_config.cookie.as_str())
+        },
+        jenkins_config.cookie_refresh.clone(),
         client_config,
     )));
     // println!("config.url: {}", config.url); // client.read().await.base_url

@@ -7,6 +7,7 @@ use std::io::BufReader;
 
 use crate::constants::{ParamType, DEFAULT_PARAM_VALUE};
 pub mod client;
+pub mod cookie;
 pub use client::ClientConfig;
 #[doc(hidden)]
 pub mod history;

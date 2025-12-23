@@ -20,7 +20,11 @@ static UPDATE_VERSION: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 static UPDATE_NOTIFIED: AtomicBool = AtomicBool::new(false);
 
 fn is_debug_update() -> bool {
-    cfg!(debug_assertions) && env::var("FORCE_UPDATE_CHECK").unwrap_or_default() == "true"
+    if !cfg!(debug_assertions) {
+        return false;
+    }
+    let value = env::var("FORCE_UPDATE_CHECK").unwrap_or_default().to_lowercase();
+    value == "1"
 }
 
 pub async fn check_update() {

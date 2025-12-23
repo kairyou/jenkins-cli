@@ -57,6 +57,11 @@ pub fn simplify_url(url: &str) -> String {
     PROTOCOL_RE.replace(url.trim_end_matches('/'), "").to_string()
 }
 
+/// Enable debug logging when JENKINS_DEBUG is set.
+pub fn debug_enabled() -> bool {
+    std::env::var("JENKINS_DEBUG").is_ok()
+}
+
 /// get current unix timestamp
 pub fn current_timestamp() -> i64 {
     use std::time::{SystemTime, UNIX_EPOCH};

@@ -8,6 +8,7 @@ use serde_json::Value as JsonValue;
 use std::fs;
 use std::path::PathBuf;
 use tokio::sync::Mutex;
+use toml_edit::{value, DocumentMut};
 
 use crate::env_checks::check_unsupported_terminal;
 use crate::i18n::macros::t;
@@ -55,7 +56,7 @@ pub async fn initialize_config(matches: &clap::ArgMatches) -> Result<GlobalConfi
 
     // println!("arg len: {}", std::env::args().len());
     let url_arg = matches.get_one::<String>("url");
-    let cli_config = ["url", "user", "token"]
+    let cli_config = ["url", "user", "token", "cookie"]
         .iter()
         .fold(JenkinsConfig::default(), |mut config, &field| {
             if let Some(value) = matches.get_one::<String>(field) {
@@ -63,17 +64,21 @@ pub async fn initialize_config(matches: &clap::ArgMatches) -> Result<GlobalConfi
                     "url" => config.url = value.to_string(),
                     "user" => config.user = value.to_string(),
                     "token" => config.token = value.to_string(),
+                    "cookie" => config.cookie = value.to_string(),
                     _ => {}
                 }
             }
             config
         });
 
+    let has_valid_auth = |c: &JenkinsConfig| {
+        let has_basic = !c.user.is_empty() && !c.token.is_empty();
+        let has_cookie = !c.cookie.is_empty();
+        has_cookie || has_basic
+    };
+
     if url_arg.is_none()
-        && (jenkins_configs.is_empty()
-            || jenkins_configs
-                .iter()
-                .any(|c| c.url.is_empty() || c.user.is_empty() || c.token.is_empty()))
+        && (jenkins_configs.is_empty() || jenkins_configs.iter().any(|c| c.url.is_empty() || !has_valid_auth(c)))
     {
         eprintln!("{}", t!("fill-required-config").yellow());
         println!("{}", t!("jenkins-login-instruction"));
@@ -107,6 +112,11 @@ pub async fn initialize_config(matches: &clap::ArgMatches) -> Result<GlobalConfi
                                 matched.token
                             } else {
                                 cli_config.token
+                            },
+                            cookie: if cli_config.cookie.is_empty() {
+                                matched.cookie
+                            } else {
+                                cli_config.cookie
                             },
                             ..matched
                         },
@@ -161,6 +171,59 @@ pub async fn select_jenkins_service() -> Result<()> {
     });
 
     Ok(())
+}
+
+/// Persist cookie for matched Jenkins service in config file.
+/// Returns true if the cookie is already current or was written.
+pub fn persist_cookie_for_url(url: &str, cookie: &str) -> Result<bool> {
+    let home_dir = home_dir().expect(&t!("get-home-dir-failed"));
+    let config_path = home_dir.join(CONFIG_FILE);
+    if !config_path.exists() {
+        return Ok(false);
+    }
+    if crate::utils::debug_enabled() {
+        eprintln!(
+            "[debug] persist_cookie_for_url: path={}, url={}",
+            config_path.display(),
+            url
+        );
+    }
+
+    let content = fs::read_to_string(&config_path).expect(&t!("read-config-file-failed"));
+    let mut doc = match content.parse::<DocumentMut>() {
+        Ok(doc) => doc,
+        Err(_) => return Ok(false),
+    };
+
+    let target_url = utils::simplify_url(url);
+    let mut updated = false;
+    if let Some(jenkins) = doc["jenkins"].as_array_of_tables_mut() {
+        for table in jenkins.iter_mut() {
+            let table_url = table.get("url").and_then(|v| v.as_str()).map(utils::simplify_url);
+            if table_url.as_deref() == Some(&target_url) {
+                if crate::utils::debug_enabled() {
+                    eprintln!("[debug] persist_cookie_for_url: matched {}", target_url);
+                }
+                let existing = table.get("cookie").and_then(|v| v.as_str()).unwrap_or("");
+                if existing == cookie {
+                    return Ok(true);
+                }
+                table["cookie"] = value(cookie);
+                updated = true;
+                break;
+            }
+        }
+    }
+
+    if updated {
+        fs::write(&config_path, doc.to_string()).expect(&t!("write-default-config-failed"));
+        if crate::utils::debug_enabled() {
+            eprintln!("[debug] persist_cookie_for_url: wrote cookie for {}", target_url);
+        }
+        return Ok(true);
+    }
+
+    Ok(false)
 }
 
 /// Apply global settings from the global configuration

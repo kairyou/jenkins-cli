@@ -23,8 +23,8 @@ cancel-build-error = Failed to cancel build: {$error}
 bye = Bye!
 
 load-config-failed = Failed to load configuration
-fill-required-config = Please fill in the required configuration (url, user, token)
-jenkins-login-instruction = Log in to Jenkins, click on your avatar in the top right corner to get User ID and generate API Token
+fill-required-config = Please fill in the required configuration (url + (user & token) or cookie)
+jenkins-login-instruction = Log in to Jenkins, click on your avatar in the top right corner to get User ID and generate API Token, or provide a valid auth cookie
 select-jenkins = Please select Jenkins service
 select-jenkins-failed = Failed to select Jenkins service
 get-home-dir-failed = Failed to get home directory

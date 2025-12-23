@@ -62,12 +62,16 @@ jenkins -U http://jenkins.example.com:8081/job/My-Job/ -u username -t api_token
 
 # Run with Jenkins server URL - Show project list for selection and deploy
 jenkins -U http://jenkins.example.com:8081 -u username -t api_token
+
+# Run with Jenkins auth cookie (e.g. jwt_token) - Useful when API token is not accepted
+jenkins -U http://jenkins.example.com:8081 --cookie "jwt_token=your-jwt"
 ```
 
 Available command line options:
 - `-U, --url <URL>`: Jenkins server URL or project URL
 - `-u, --user <USER>`: Jenkins username
 - `-t, --token <TOKEN>`: Jenkins API token
+- `-c, --cookie <COOKIE>`: Jenkins auth cookie (e.g. jwt_token=...)
 
 ## Configuration
 
@@ -83,7 +87,7 @@ Create a file named `.jenkins.toml` in your home directory with the following co
 
 [[jenkins]]
 name = "SIT"
-url = "https://jenkins-sit.your-company.com"
+url = "https://jenkins-sit.example.com"
 user = "your-username"
 token = "your-api-token"
 # includes = []
@@ -91,7 +95,7 @@ token = "your-api-token"
 
 # [[jenkins]]
 # name = "PROD"
-# url = "https://jenkins-prod.your-company.com"
+# url = "https://jenkins-prod.example.com"
 # user = "your-username"
 # token = "your-api-token"
 # includes = ["frontend", "backend"]
@@ -110,9 +114,51 @@ token = "your-api-token"
   - `url`: Jenkins server URL
   - `user`: Your Jenkins user ID
   - `token`: Your Jenkins API token
+  - `cookie`: Optional, Jenkins auth cookie (e.g. jwt_token=...). Use only if API tokens are not accepted.
+  - `cookie_refresh`: Optional, cookie auto-update configuration (updates the `cookie` value)
+    - `url`: Refresh endpoint URL
+    - `method`: HTTP method, default "POST"
+    - `request`: Optional, request parameters (replaces `${cookie.<name>}` placeholders with values from the `cookie` field):
+      - `query`: URL query parameters
+      - `form`: x-www-form-urlencoded body parameters
+      - `json`: JSON body parameters
+    - `cookie_updates`: Optional, cookie updates extracted from the response (written back to the `cookie` field):
+      - `body.json:<path>`: JSON body path, e.g. `body.json:data.refreshToken`
+      - `header:<name>`: Response header name, e.g. `header:X-JWT-Token`
+      - `body.regex:<pattern>`: Regex against response body, use capture group 1, e.g. `body.regex:token=([\\w.-]+)`
   - `includes`: List of strings or regex patterns to include projects (optional)
   - `excludes`: List of strings or regex patterns to exclude projects (optional)
   - `enable_history`: Remember build parameters (optional), overrides global setting if specified
+
+### Cookie Authentication (Optional)
+
+Most users should use `user` + `token`. Cookie auth is an optional fallback for setups that do not accept API tokens.
+
+Note: If you have an extra endpoint to refresh cookie values, configure `cookie_refresh` to call it and write back to `cookie`; otherwise you can ignore `cookie_refresh`.
+
+```toml
+[[jenkins]]
+name = "Query-Refresh"
+url = "https://jenkins-query.example.com"
+cookie = "jwt_token=initial"
+
+[jenkins.cookie_refresh]
+url = "https://auth.example.com/api/refresh-token"
+method = "POST"
+request = { query = { refreshToken = "${cookie.jwt_token}" } }
+cookie_updates = { jwt_token = "body.json:data.refreshToken" }
+
+[[jenkins]]
+name = "JSON-Refresh"
+url = "https://jenkins-json.example.com"
+cookie = "jwt_token=initial"
+
+[jenkins.cookie_refresh]
+url = "https://auth.example.com/api/refresh-token"
+method = "POST"
+request = { json = { refreshToken = "${cookie.jwt_token}" } }
+cookie_updates = { jwt_token = "body.json:data.refreshToken" }
+```
 
 ### Project Filtering
 

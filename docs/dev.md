@@ -57,6 +57,7 @@ sudo apt install -y libssl-dev pkg-config
 # cargo add semver # Version compare
 
 # cargo add --dev tempfile # For temp files/dirs in tests
+# cargo add toml_edit # modify toml, preserving comments
 ```
 
 <!-- 
@@ -72,7 +73,9 @@ cargo add spinners # spinner
 cargo run --
 cargo run -- -U http://test.example.com:8081 -u <username> -t <token>
 cargo run -- -U http://test.example.com:8081/job/CLI-Test-Job/ -u <username> -t <token>
-# FORCE_UPDATE_CHECK=true cargo run --
+# FORCE_UPDATE_CHECK=1 cargo run --  # also accepts "true"
+# Debug logs (cookie refresh / persistence)
+# JENKINS_DEBUG=1 cargo run --
 ```
 
 ### Build
