@@ -19,6 +19,7 @@ build-cancelled = 构建已终止
 cancel-build-failed = 终止构建失败
 check-build-status-failed = 无法检查构建状态
 cancel-build-error = 取消构建失败: {$error}
+build-already-completed = 构建已完成
 
 bye = Bye!
 

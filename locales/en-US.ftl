@@ -19,6 +19,7 @@ build-cancelled = Build cancelled
 cancel-build-failed = Failed to cancel build
 check-build-status-failed = Failed to check build status
 cancel-build-error = Failed to cancel build: {$error}
+build-already-completed = Build already completed
 
 bye = Bye!
 

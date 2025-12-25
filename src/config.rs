@@ -10,11 +10,11 @@ use std::path::PathBuf;
 use tokio::sync::Mutex;
 use toml_edit::{value, DocumentMut};
 
-use crate::env_checks::check_unsupported_terminal;
 use crate::i18n::macros::t;
 use crate::i18n::I18n;
 use crate::migrations::migrate_config_yaml_to_toml;
 use crate::models::{Config, GlobalConfig, JenkinsConfig};
+use crate::prompt;
 
 use crate::utils;
 use crate::utils::clear_screen;
@@ -41,7 +41,7 @@ pub static DATA_DIR: Lazy<PathBuf> = Lazy::new(|| {
     data_dir
 });
 
-pub async fn initialize_config(matches: &clap::ArgMatches) -> Result<GlobalConfig> {
+pub async fn initialize_config(matches: &clap::ArgMatches) -> Result<(GlobalConfig, bool)> {
     let _ = DATA_DIR.as_path(); // auto create data dir
 
     let file_config = load_config().expect(&t!("load-config-failed"));
@@ -88,7 +88,7 @@ pub async fn initialize_config(matches: &clap::ArgMatches) -> Result<GlobalConfi
     let need_select = {
         let mut config = CONFIG.lock().await;
         config.global = Some(global_config.clone());
-        config.services = jenkins_configs;
+        config.services = jenkins_configs.clone();
 
         match url_arg {
             Some(url) => {
@@ -133,7 +133,8 @@ pub async fn initialize_config(matches: &clap::ArgMatches) -> Result<GlobalConfi
         select_jenkins_service().await?;
     }
 
-    Ok(global_config)
+    let service_step_enabled = url_arg.is_none() && !jenkins_configs.is_empty() && jenkins_configs.len() > 1;
+    Ok((global_config, service_step_enabled))
 }
 
 pub async fn select_jenkins_service() -> Result<()> {
@@ -143,23 +144,24 @@ pub async fn select_jenkins_service() -> Result<()> {
 
     let selected_config = if services.len() > 1 {
         let service_names: Vec<String> = services.iter().map(|c| c.name.clone()).collect();
-        let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
-            .with_prompt(t!("select-jenkins"))
-            .items(&service_names)
-            .default(0)
-            .interact()
-            .unwrap_or_else(|e| {
+        let selection = prompt::handle_selection(prompt::with_prompt(|| {
+            FuzzySelect::with_theme(&ColorfulTheme::default())
+                .with_prompt(t!("select-jenkins"))
+                .items(&service_names)
+                .default(0)
+                .vim_mode(true) // Esc, j|k
+                .interact()
+        }));
+
+        match selection {
+            Some(idx) => services[idx].clone(),
+            None => {
+                // Ctrl+C pressed at service selection - exit program
                 clear_screen();
-                if e.to_string().contains("interrupted") {
-                    std::process::exit(0);
-                } else if e.to_string().contains("IO error") {
-                    check_unsupported_terminal();
-                    std::process::exit(0);
-                }
-                eprintln!("{}: {}", t!("select-jenkins-failed"), e);
-                std::process::exit(1);
-            });
-        services[selection].clone()
+                println!("{}", t!("bye"));
+                std::process::exit(0);
+            }
+        }
     } else {
         services[0].clone()
     };
@@ -182,11 +184,11 @@ pub fn persist_cookie_for_url(url: &str, cookie: &str) -> Result<bool> {
         return Ok(false);
     }
     if crate::utils::debug_enabled() {
-        eprintln!(
+        crate::utils::debug_line(&format!(
             "[debug] persist_cookie_for_url: path={}, url={}",
             config_path.display(),
             url
-        );
+        ));
     }
 
     let content = fs::read_to_string(&config_path).expect(&t!("read-config-file-failed"));
@@ -202,7 +204,7 @@ pub fn persist_cookie_for_url(url: &str, cookie: &str) -> Result<bool> {
             let table_url = table.get("url").and_then(|v| v.as_str()).map(utils::simplify_url);
             if table_url.as_deref() == Some(&target_url) {
                 if crate::utils::debug_enabled() {
-                    eprintln!("[debug] persist_cookie_for_url: matched {}", target_url);
+                    crate::utils::debug_line(&format!("[debug] persist_cookie_for_url: matched {}", target_url));
                 }
                 let existing = table.get("cookie").and_then(|v| v.as_str()).unwrap_or("");
                 if existing == cookie {
@@ -218,7 +220,10 @@ pub fn persist_cookie_for_url(url: &str, cookie: &str) -> Result<bool> {
     if updated {
         fs::write(&config_path, doc.to_string()).expect(&t!("write-default-config-failed"));
         if crate::utils::debug_enabled() {
-            eprintln!("[debug] persist_cookie_for_url: wrote cookie for {}", target_url);
+            crate::utils::debug_line(&format!(
+                "[debug] persist_cookie_for_url: wrote cookie for {}",
+                target_url
+            ));
         }
         return Ok(true);
     }

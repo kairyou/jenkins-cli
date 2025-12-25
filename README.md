@@ -54,6 +54,11 @@ This command will:
 3. Select a project and set build parameters
 4. Trigger the build and show real-time console output
 
+Ctrl+C behavior:
+- During selection: go back to the previous step
+- During queue/build: confirm whether to cancel
+- Press twice quickly: force exit
+
 You can also use command line arguments:
 
 ```bash

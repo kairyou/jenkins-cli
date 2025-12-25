@@ -16,5 +16,7 @@ pub mod migrations;
 #[doc(hidden)]
 pub mod models;
 #[doc(hidden)]
+pub mod prompt;
+#[doc(hidden)]
 pub mod spinner;
 pub mod utils;

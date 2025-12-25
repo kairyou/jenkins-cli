@@ -16,6 +16,8 @@ pub mod history;
 #[doc(hidden)]
 pub enum Event {
     StopSpinner,
+    ResumeSpinner,
+    CancelPolling,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

@@ -1,18 +1,19 @@
 use clap::{Arg, Command};
 use colored::*;
 use dialoguer::{theme::ColorfulTheme, FuzzySelect};
-use once_cell::sync::Lazy;
 use regex::Regex;
-use std::sync::atomic;
-use tokio::{signal, sync::mpsc, sync::Mutex};
+use tokio::sync::mpsc;
 
 mod config;
 mod constants;
 mod env_checks;
+mod flow;
 mod i18n;
+mod interrupts;
 mod jenkins;
 mod migrations;
 mod models;
+mod prompt;
 mod spinner;
 mod update;
 mod utils;
@@ -21,6 +22,9 @@ mod utils;
 use crate::i18n::macros::t;
 use crate::{
     config::{initialize_config, CONFIG},
+    env_checks::check_unsupported_terminal,
+    flow::{handle_back_and_route, RouteAction, StepTracker},
+    interrupts::{handle_ctrl_c, spawn_ctrl_c_key_listener, CtrlCPhase, CTRL_C},
     jenkins::{
         client::JenkinsClient,
         history::{History, HistoryEntry},
@@ -28,15 +32,8 @@ use crate::{
     },
     models::JenkinsConfig,
     update::{check_update, notify_if_update_available, precheck_update_status},
-    utils::{clear_screen, current_timestamp, delay, flush_stdin, format_url},
+    utils::{clear_screen, current_timestamp, format_url, prepare_terminal_for_exit},
 };
-
-// Flag indicating whether Ctrl+C has been pressed
-static CTRL_C_PRESSED: atomic::AtomicBool = atomic::AtomicBool::new(false);
-// Flag indicating whether the Ctrl+C handling logic has been completed
-static CTRL_C_HANDLED: Lazy<atomic::AtomicBool> = Lazy::new(|| atomic::AtomicBool::new(false));
-// Flag indicating whether a build is currently in progress
-static LOADING: Lazy<std::sync::Arc<Mutex<bool>>> = Lazy::new(|| std::sync::Arc::new(Mutex::new(false)));
 
 #[tokio::main]
 async fn main() {
@@ -77,12 +74,12 @@ async fn main() {
                 .required(false),
         )
         .get_matches();
-    // check_unsupported_terminal();
+    check_unsupported_terminal();
 
     precheck_update_status();
     notify_if_update_available(); // before loading config
 
-    let global_config = initialize_config(&matches).await.unwrap();
+    let (global_config, service_step_enabled) = initialize_config(&matches).await.unwrap();
     let should_check_update = global_config.check_update.unwrap_or(true);
 
     clear_screen();
@@ -93,13 +90,36 @@ async fn main() {
         });
     }
 
-    // main logic
-    menu().await;
+    let (ctrlc_tx, ctrlc_rx) = mpsc::unbounded_channel();
+    // Background key listener for queue/build phase
+    tokio::spawn(async move {
+        spawn_ctrl_c_key_listener(ctrlc_tx).await;
+    });
+    // Global Ctrl+C handler (selection uses dialoguer, build uses cancel flow)
+    tokio::spawn(async move {
+        handle_ctrl_c(ctrlc_rx).await;
+    });
 
-    // wait for Ctrl+C loop to finish
-    while !CTRL_C_HANDLED.load(atomic::Ordering::SeqCst) {
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    // main logic - loop to allow returning to service selection
+    loop {
+        if menu(service_step_enabled).await {
+            clear_screen();
+            if let Err(e) = config::select_jenkins_service().await {
+                eprintln!("Failed to select service: {}", e);
+                std::process::exit(1);
+            }
+            continue;
+        }
+        break;
     }
+
+    if CTRL_C.phase() == CtrlCPhase::Cancelling {
+        // Keep the process alive until the cancel flow completes.
+        CTRL_C.wait_for_cancel().await;
+        return;
+    }
+    CTRL_C.set_app_running(false);
+    prepare_terminal_for_exit();
 }
 
 // actions
@@ -134,11 +154,24 @@ fn filter_projects(projects: Vec<jenkins::JenkinsJob>, config: &JenkinsConfig) -
 }
 
 /// Main menu
-async fn menu() {
+async fn menu(service_step_enabled: bool) -> bool {
     let config = CONFIG.lock().await;
     // println!("runtime_config:\n{:?}\n{:?}", config.global, config.jenkins);
 
-    let jenkins_config = config.jenkins.as_ref().expect("Jenkins configuration not found");
+    let global_config = config.global.clone();
+    let jenkins_config = config
+        .jenkins
+        .as_ref()
+        .expect("Jenkins configuration not found")
+        .clone();
+    drop(config);
+
+    // Flow steps:
+    // - Service selection (optional)
+    // - Project selection (skipped if URL points to a job)
+    // - Parameter selection
+    let can_back_to_project = !jenkins_config.url.contains("/job/");
+    let mut steps = StepTracker::new(service_step_enabled, can_back_to_project);
     let auth = if jenkins_config.user.is_empty() || jenkins_config.token.is_empty() {
         None
     } else {
@@ -158,8 +191,7 @@ async fn menu() {
     let (event_sender, mut event_receiver) = mpsc::channel::<Event>(100);
 
     // Create client configuration
-    let client_config = config
-        .global
+    let client_config = global_config
         .as_ref()
         .and_then(|g| g.timeout)
         .map(|timeout| ClientConfig { timeout: Some(timeout) });
@@ -179,56 +211,96 @@ async fn menu() {
     let mut history = History::new().unwrap();
     let enable_history = jenkins_config.enable_history.unwrap_or(true);
 
-    // Spawn a task to listen for Ctrl+C
-    let _ctrl_c_handler = {
-        let client_clone = std::sync::Arc::clone(&client);
-        tokio::spawn(async move {
-            handle_ctrl_c(client_clone, event_sender).await;
-        })
-    };
-
-    let job = get_project(&client, jenkins_config, &mut history)
-        .await
-        .expect("Failed to get job info");
-    let relative_path = job.url.split("/job/").skip(1).collect::<Vec<&str>>().join("/job/");
-    let job_url = format_url(&format!("{}/job/{}", base_url, relative_path));
-    // println!("base_url: {}, job_url: {}, job: {:?}", base_url, job_url, job);
-
-    notify_if_update_available(); // before prompt params
-
-    // Get build history
-    let history_item = history.get_history(
-        &HistoryEntry {
-            name: job.name.clone(),
-            job_url: job_url.clone(),
-            ..Default::default()
-        },
-        &jenkins_config.url,
-    );
-
-    // Get current Jenkins Job parameters
-    let current_parameters = {
-        let mut client_guard = client.write().await; // write for set job_url
-        client_guard.job_url = Some(job_url.to_string());
-        client_guard
-            .get_job_parameters(&job_url)
-            .await
-            .expect(&t!("get-job-parameters-failed"))
-    };
-
-    // Use last build params
-    let use_previous_params = history
-        .should_use_history_parameters(&history_item, &current_parameters)
+    CTRL_C
+        .set_ctx(std::sync::Arc::clone(&client), event_sender.clone())
         .await;
 
-    let user_params = if use_previous_params {
-        let mut client_guard = client.write().await;
-        client_guard.job_url = Some(job_url.to_string());
+    // Main selection loop - allows going back from param selection to project selection
+    let (job, job_url, user_params) = loop {
+        // Step 1: Select project
+        steps.enter_project();
+        let job = match get_project(&client, &jenkins_config, &mut history).await {
+            Some(j) => j,
+            None => {
+                // Ctrl+C pressed
+                match handle_back_and_route(&mut steps, &t!("bye")) {
+                    RouteAction::ReturnService => return true,
+                    RouteAction::ContinueProject => {
+                        clear_screen();
+                        continue;
+                    }
+                }
+            }
+        };
+        let relative_path = job.url.split("/job/").skip(1).collect::<Vec<&str>>().join("/job/");
+        let job_url = format_url(&format!("{}/job/{}", base_url, relative_path));
 
-        // merge history parameters with current parameters
-        History::merge_parameters(&history_item.unwrap(), &current_parameters)
-    } else {
-        JenkinsClient::prompt_job_parameters(current_parameters).await
+        notify_if_update_available(); // before prompt params
+
+        // Get build history
+        let history_item = history.get_history(
+            &HistoryEntry {
+                name: job.name.clone(),
+                job_url: job_url.clone(),
+                ..Default::default()
+            },
+            &jenkins_config.url,
+        );
+
+        // Get current Jenkins Job parameters
+        let current_parameters = {
+            let mut client_guard = client.write().await; // write for set job_url
+            client_guard.job_url = Some(job_url.to_string());
+            client_guard
+                .get_job_parameters(&job_url)
+                .await
+                .expect(&t!("get-job-parameters-failed"))
+        };
+
+        // Use last build params
+        steps.enter_params();
+        let use_previous_params = match history
+            .should_use_history_parameters(&history_item, &current_parameters)
+            .await
+        {
+            Some(choice) => choice,
+            None => {
+                // Ctrl+C pressed
+                match handle_back_and_route(&mut steps, &t!("bye")) {
+                    RouteAction::ReturnService => return true,
+                    RouteAction::ContinueProject => {
+                        clear_screen();
+                        continue;
+                    }
+                }
+            }
+        };
+
+        // Step 2: Select parameters
+        let user_params = if use_previous_params {
+            let mut client_guard = client.write().await;
+            client_guard.job_url = Some(job_url.to_string());
+
+            // merge history parameters with current parameters
+            History::merge_parameters(&history_item.unwrap(), &current_parameters)
+        } else {
+            match JenkinsClient::prompt_job_parameters(current_parameters).await {
+                Some(params) => params,
+                None => {
+                    // Ctrl+C pressed
+                    match handle_back_and_route(&mut steps, &t!("bye")) {
+                        RouteAction::ReturnService => return true,
+                        RouteAction::ContinueProject => {
+                            clear_screen();
+                            continue;
+                        }
+                    }
+                }
+            }
+        };
+
+        // All selections completed
+        break (job, job_url, user_params);
     };
 
     // clear_screen();
@@ -263,34 +335,30 @@ async fn menu() {
         }
     };
 
-    *LOADING.lock().await = true;
+    CTRL_C.set_phase(CtrlCPhase::Polling);
     let build_url = {
         let client_guard = client.read().await;
         match client_guard.poll_queue_item(&queue_location, &mut event_receiver).await {
             Ok(url) => {
-                *LOADING.lock().await = false;
+                CTRL_C.finish_polling();
                 url
             }
             Err(e) => {
-                // println!("poll_queue_item: {}", e.to_string().red());
-                *LOADING.lock().await = false;
+                CTRL_C.finish_polling();
                 if e.to_string().contains("cancelled!") {
-                    return;
+                    return false;
                 }
                 panic!("Failed to poll queue item: {}", e);
             }
         }
     };
-    // println!("Build URL: {}", build_url.underline().blue());
 
-    *LOADING.lock().await = true;
+    CTRL_C.set_phase(CtrlCPhase::Polling);
     let client_guard = client.read().await;
     match client_guard.poll_build_status(&build_url, &mut event_receiver).await {
         Ok(_) => {
-            // println!("{}", "Build completed successfully.".green());
-            *LOADING.lock().await = false;
+            CTRL_C.finish_polling();
             // stop loop
-            CTRL_C_HANDLED.store(true, atomic::Ordering::SeqCst);
             if enable_history {
                 if let Err(e) = history.update_field(
                     &HistoryEntry {
@@ -307,12 +375,10 @@ async fn menu() {
             }
         }
         Err(e) => {
-            // println!("poll_build_status: {}", e.to_string().red());
-            *LOADING.lock().await = false;
+            CTRL_C.finish_polling();
             if e.to_string().contains("cancelled!") {
-                return;
+                return false;
             }
-            CTRL_C_HANDLED.store(true, atomic::Ordering::SeqCst);
 
             // // get full build log
             // flush_stdin();
@@ -323,7 +389,6 @@ async fn menu() {
             //     .unwrap();
             // if proceed {
             //     if let Err(log_err) = client_guard.get_jenkins_console_log(&build_url).await {
-            //         println!("Failed to retrieve console log: {}", log_err);
             //     }
             // }
             println!(
@@ -332,6 +397,8 @@ async fn menu() {
             );
         }
     }
+
+    false
 }
 
 /// Get project information from URL or selection
@@ -339,12 +406,11 @@ async fn get_project(
     client: &std::sync::Arc<tokio::sync::RwLock<JenkinsClient>>,
     jenkins_config: &JenkinsConfig,
     history: &mut History,
-) -> Result<jenkins::JenkinsJob, anyhow::Error> {
+) -> Option<jenkins::JenkinsJob> {
     if jenkins_config.url.contains("/job/") {
         match client.read().await.get_project(&jenkins_config.url).await {
-            Ok(job) => Ok(job),
+            Ok(job) => Some(job),
             Err(e) => {
-                // Err(anyhow::anyhow!("Failed to get job info: {}", e))
                 eprintln!("{}: {}", t!("get-project-failed"), e);
                 std::process::exit(1);
             }
@@ -401,125 +467,24 @@ async fn get_project(
 
         notify_if_update_available(); // before select project
 
-        let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
-            .with_prompt(t!("select-project-prompt"))
-            .items(&project_names)
-            .default(0)
-            // .report(false) // Display the selected project
-            .vim_mode(true) // Esc, j|k
-            .with_initial_text("")
-            .interact()
-            .unwrap_or_else(|e| {
-                if e.to_string().contains("interrupted") {
-                    std::process::exit(0);
-                }
-                eprintln!("{}: {}", t!("select-project-failed"), e);
-                std::process::exit(1);
-            });
-        // Get project parameters
-        let job = projects.get(selection).expect(&t!("select-project-failed"));
+        let selection = prompt::handle_selection(prompt::with_prompt(|| {
+            FuzzySelect::with_theme(&ColorfulTheme::default())
+                .with_prompt(t!("select-project-prompt"))
+                .items(&project_names)
+                .default(0)
+                // .report(false) // Display the selected project
+                .vim_mode(true) // Esc, j|k
+                .with_initial_text("")
+                .interact()
+        }));
 
-        // println!("Selected project: {}", job.display_name.cyan().bold());
-        Ok(job.clone())
-    }
-}
-
-/// Handle Ctrl+C
-async fn handle_ctrl_c(client: std::sync::Arc<tokio::sync::RwLock<JenkinsClient>>, event_sender: mpsc::Sender<Event>) {
-    // Listen for Ctrl+C in a separate task, used to exit immediately when Ctrl+C is triggered multiple times
-    tokio::spawn({
-        async move {
-            loop {
-                signal::ctrl_c().await.expect("Failed to listen for Ctrl+C");
-                if CTRL_C_PRESSED.load(atomic::Ordering::SeqCst) {
-                    println!("Ctrl+C pressed again, exiting immediately.");
-                    std::process::exit(1);
-                }
-                CTRL_C_PRESSED.store(true, atomic::Ordering::SeqCst);
-                let _ = event_sender.send(Event::StopSpinner).await;
+        // Check if user pressed Ctrl+C
+        match selection {
+            Some(idx) => {
+                let job = projects.get(idx).expect(&t!("select-project-failed"));
+                Some(job.clone())
             }
-        }
-    });
-    signal::ctrl_c().await.expect("Failed to listen for Ctrl+C");
-    // println!("Ctrl+C pressed");
-    println!("Checking for running builds...");
-    // println!("Loading {:?}", *LOADING.lock().await);
-
-    if *LOADING.lock().await {
-        flush_stdin();
-        // Wait for the spinner to stop to prevent it from obscuring the prompt
-        while *LOADING.lock().await {
-            tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
-        }
-
-        let prompt = t!("cancel-build-prompt").red().bold().to_string();
-        let confirm = match dialoguer::Confirm::new().with_prompt(prompt).default(false).interact() {
-            Ok(result) => result,
-            Err(_e) => {
-                // eprintln!("Error reading input: {}", _e);
-                return;
-            }
-        };
-        if confirm {
-            println!("{}", t!("cancelling-build").yellow());
-            tokio::select! {
-              _ = signal::ctrl_c() => {
-                  // println!("Ctrl+C pressed again, exiting immediately.");
-                  // std::process::exit(1);
-              },
-              _ = async {
-                loop {
-                  let client_guard = client.read().await;
-                  if let Ok((building, id)) = client_guard.is_building().await {
-                      // println!("!! : {}, id: {:?}", building, id);
-                      if building {
-                          if let Some(num) = id {
-                              println!("{}: {}", t!("current-build-id"), num.to_string().cyan().bold());
-                          }
-                          match client_guard.cancel_build(id).await {
-                              Ok(_) => {
-                                  // Sometimes Jenkins continues building after cancellation, so we try multiple times
-                                  let mut stopped = false;
-                                  let max_attempts = 10;
-                                  let mut attempts = 0;
-                                  while !stopped && attempts < max_attempts {
-                                      // println!("!! {}", format!("{}", attempts + 1).yellow());
-                                      let (building, _) =
-                                          client_guard.is_building().await.unwrap();
-                                      if !building {
-                                          stopped = true;
-                                      } else {
-                                          client_guard.cancel_build(id).await.unwrap(); // try again
-                                          attempts += 1;
-                                          delay(3 * 1000).await;
-                                      }
-                                  }
-                                  if stopped {
-                                      println!("{}", t!("build-cancelled").green());
-                                  } else {
-                                      eprintln!("{}", t!("cancel-build-failed").red());
-                                  }
-                                  break;
-                              }
-                              Err(e) => {
-                                  eprintln!("{}: {}", t!("cancel-build-failed"), e.to_string().red());
-                                  break;
-                              }
-                          }
-                      }
-                  } else {
-                      eprintln!("{}", t!("check-build-status-failed").red());
-                      // break;
-                  }
-                  delay(1000).await;
-                }
-              } => {
-                // Build cancellation completed
-              }
-            }
+            None => None, // Ctrl+C pressed - go back
         }
     }
-    println!("{}", t!("bye"));
-    CTRL_C_HANDLED.store(true, atomic::Ordering::SeqCst);
-    std::process::exit(0);
 }

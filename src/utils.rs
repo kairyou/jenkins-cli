@@ -1,18 +1,12 @@
 use crossterm::{
-    cursor::{self, MoveToColumn},
-    execute,
+    cursor, execute,
     terminal::{Clear, ClearType},
 };
 use regex::Regex;
 use url::Url;
 
-use anyhow::{anyhow, Result};
 use once_cell::sync::Lazy;
-use std::{
-    io::stdout,
-    sync::atomic::{AtomicBool, Ordering},
-    sync::Arc,
-};
+use std::io::stdout;
 
 static PATH_SLASHES_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"/{2,}|/+$").unwrap());
 static PROTOCOL_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^https?://").unwrap());
@@ -21,19 +15,6 @@ static PROTOCOL_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^https?://").unwrap(
 pub fn clear_screen() {
     execute!(stdout(), Clear(ClearType::All)).unwrap();
     execute!(stdout(), cursor::MoveTo(0, 0)).unwrap(); // Move the cursor to the top-left corner
-}
-
-/// Clears the current line.
-/// like print!("\r\x1b[K")
-pub fn clear_line() {
-    execute!(stdout(), Clear(ClearType::CurrentLine)).unwrap();
-    execute!(stdout(), MoveToColumn(0)).unwrap(); // Move the cursor to the start of the line
-}
-
-/// Moves the cursor up by one line and clears that line
-pub fn clear_previous_line() {
-    execute!(stdout(), cursor::MoveUp(1)).unwrap();
-    clear_line();
 }
 
 /// Formats the URL
@@ -62,6 +43,34 @@ pub fn debug_enabled() -> bool {
     std::env::var("JENKINS_DEBUG").is_ok()
 }
 
+/// Print a debug line that won't indent subsequent output while a spinner is active.
+pub fn debug_line(message: &str) {
+    if !debug_enabled() {
+        return;
+    }
+    use std::io::{self, Write};
+    let mut stderr = io::stderr();
+    let _ = write!(stderr, "\r\x1b[2K{}\r\n", message);
+    let _ = stderr.flush();
+}
+
+/// Clear the current line on stdout and return cursor to column 0.
+pub fn reset_terminal_line() {
+    use std::io::{self, Write};
+    let mut stdout = io::stdout();
+    let _ = write!(stdout, "\r\x1b[2K");
+    let _ = stdout.flush();
+    let mut stderr = io::stderr();
+    let _ = write!(stderr, "\r\x1b[2K");
+    let _ = stderr.flush();
+}
+
+/// Ensure terminal is in a sane state before exiting.
+pub fn prepare_terminal_for_exit() {
+    let _ = crossterm::terminal::disable_raw_mode();
+    reset_terminal_line();
+}
+
 /// get current unix timestamp
 pub fn current_timestamp() -> i64 {
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -69,17 +78,6 @@ pub fn current_timestamp() -> i64 {
         .duration_since(UNIX_EPOCH)
         .expect("Time went backwards")
         .as_secs() as i64
-}
-
-/// check if ctrl+c is pressed
-#[doc(hidden)]
-#[allow(dead_code)]
-pub fn check_ctrl_c(ctrl_c_pressed: &Arc<AtomicBool>) -> Result<(), anyhow::Error> {
-    if ctrl_c_pressed.load(Ordering::SeqCst) {
-        Err(anyhow!("Ctrl+C pressed"))
-    } else {
-        Ok(())
-    }
 }
 
 /// delay `ms` milliseconds

@@ -15,14 +15,14 @@ use reqwest::{
 // use super::{JenkinsJob, JenkinsResponse, JenkinsJobConfig, JenkinsJobParameter};
 use crate::constants::{
     ParamType, DEFAULT_PARAM_VALUE, JENKINS_AUTO_BUILD_TYPES, JENKINS_BUILDABLE_TYPES, JENKINS_FOLDER_TYPE,
-    MASKED_PASSWORD,
 };
 use crate::i18n::macros::t;
+use crate::prompt;
 use crate::{
     jenkins::{self, cookie::CookieStore, Event, JenkinsJob, JenkinsJobParameter, JenkinsResponse, ParamInfo},
     models::CookieRefreshConfig,
     spinner,
-    utils::{clear_previous_line, clear_screen, delay, format_url, get_current_branch, get_git_branches},
+    utils::{clear_screen, delay, format_url, get_current_branch, get_git_branches},
 };
 
 /// Configuration for the Jenkins client.
@@ -34,6 +34,14 @@ pub struct ClientConfig {
     // pub max_retries: Option<u32>,
     // pub proxy: Option<String>,
     // pub verify_ssl: Option<bool>,
+}
+
+pub struct BuildStatus {
+    pub building: bool,
+    pub id: Option<u32>,
+    pub last_build: Option<u32>,
+    pub last_completed: Option<u32>,
+    pub in_queue: bool,
 }
 
 /// Represents a Jenkins client.
@@ -280,11 +288,11 @@ impl JenkinsClient {
             return Ok(());
         }
         if crate::utils::debug_enabled() {
-            eprintln!(
+            crate::utils::debug_line(&format!(
                 "[debug] cookie_refresh: attempting (already_attempted={}, has_cookie={})",
                 self.cookie_refresh_attempted.load(Ordering::SeqCst),
                 self.cookie_store.header_value().is_some()
-            );
+            ));
         }
         if self.cookie_refresh_attempted.swap(true, Ordering::SeqCst) {
             return Ok(());
@@ -292,7 +300,7 @@ impl JenkinsClient {
         let has_cookie = self.cookie_store.header_value().is_some();
         if let Err(e) = self.refresh_cookie().await {
             if crate::utils::debug_enabled() {
-                eprintln!("[debug] cookie_refresh: failed: {}", e);
+                crate::utils::debug_line(&format!("[debug] cookie_refresh: failed: {}", e));
             }
             if !has_cookie {
                 return Err(e);
@@ -337,15 +345,15 @@ impl JenkinsClient {
                 }
                 debug_url = parsed.to_string();
             }
-            eprintln!("[debug] cookie_refresh: {} {}", method, debug_url);
+            crate::utils::debug_line(&format!("[debug] cookie_refresh: {} {}", method, debug_url));
             if let Some(value) = headers.get(COOKIE).and_then(|v| v.to_str().ok()) {
-                eprintln!("[debug] cookie_refresh: request_header_cookie={}", value);
+                crate::utils::debug_line(&format!("[debug] cookie_refresh: request_header_cookie={}", value));
             }
             if !query.is_empty() || !form.is_empty() || !json.is_empty() {
-                eprintln!(
+                crate::utils::debug_line(&format!(
                     "[debug] cookie_refresh: params query={:?} form={:?} json={:?}",
                     query, form, json
-                );
+                ));
             }
         }
         let mut request = self
@@ -610,9 +618,7 @@ impl JenkinsClient {
         let status = response.status();
         if status.is_success() {
             let xml_response = response.text().await?;
-            // println!("xml_response: {:?}", xml_response);
             let parameters = jenkins::parse_job_parameters_from_xml(&xml_response);
-            // println!("parameters: {:?}", parameters);
             return Ok(parameters);
         }
 
@@ -636,7 +642,6 @@ impl JenkinsClient {
         let json_response: serde_json::Value = response.json().await?;
         // println!("json_response: {:?}", json_response);
         let parameters = jenkins::parse_job_parameters_from_json(&json_response);
-        // println!("parameters: {:?}", parameters);
         Ok(parameters)
     }
 
@@ -648,33 +653,122 @@ impl JenkinsClient {
     ///
     /// # Returns
     ///
-    /// A `HashMap` containing the parameter names and their corresponding values.
-    pub async fn prompt_job_parameters(parameter_definitions: Vec<JenkinsJobParameter>) -> HashMap<String, ParamInfo> {
+    /// `Some(HashMap)` with parameters, or `None` if user pressed Ctrl+C to go back
+    pub async fn prompt_job_parameters(
+        parameter_definitions: Vec<JenkinsJobParameter>,
+    ) -> Option<HashMap<String, ParamInfo>> {
         use dialoguer::theme::ColorfulTheme; // ColorfulTheme/SimpleTheme
+        use std::io::{self, Write};
         let mut parameters = HashMap::new();
         let mut branches = get_git_branches();
         let branch_names = ["GIT_BRANCH", "gitBranch"];
 
         // for string, text, password
-        fn prompt_user_input(fmt_name: &str, fmt_desc: &str, default_value: &str, trim: Option<bool>) -> String {
-            let user_value: String = dialoguer::Input::with_theme(&ColorfulTheme::default())
-                .with_prompt(format!("{}{}", t!("prompt-input", "name" => fmt_name), fmt_desc))
-                .with_initial_text(default_value.to_string())
-                .allow_empty(true)
-                .interact_text()
-                .unwrap_or_else(|_e| {
-                    std::process::exit(0);
-                });
+        fn prompt_user_input(
+            fmt_name: &str,
+            fmt_desc: &str,
+            default_value: &str,
+            trim: Option<bool>,
+        ) -> Option<String> {
+            let user_value = prompt::handle_input(prompt::with_prompt(|| {
+                dialoguer::Input::with_theme(&ColorfulTheme::default())
+                    .with_prompt(format!("{}{}", t!("prompt-input", "name" => fmt_name), fmt_desc))
+                    .with_initial_text(default_value.to_string())
+                    .allow_empty(true)
+                    .interact_text()
+            }))?;
 
-            if trim.unwrap_or(false) {
+            Some(if trim.unwrap_or(false) {
                 user_value.trim().to_string()
             } else {
                 user_value
-            }
+            })
+        }
+
+        fn prompt_password_input(fmt_name: &str, fmt_desc: &str, default_value: &str) -> Option<String> {
+            prompt::with_prompt(|| {
+                use console::measure_text_width;
+                use crossterm::event::{self, Event, KeyCode, KeyModifiers};
+                use crossterm::terminal;
+
+                let prompt = format!("{}{}", t!("prompt-password", "name" => fmt_name), fmt_desc);
+                print!("{}", prompt);
+                let _ = io::stdout().flush();
+
+                if let Ok((cols, _)) = terminal::size() {
+                    if measure_text_width(&prompt) + 1 >= cols as usize {
+                        println!();
+                    } else {
+                        print!(" ");
+                    }
+                } else {
+                    print!(" ");
+                }
+                let _ = io::stdout().flush();
+
+                let mut raw_active = terminal::enable_raw_mode().is_ok();
+                let mut input = String::new();
+                loop {
+                    match event::read() {
+                        Ok(Event::Key(key)) => match key.code {
+                            KeyCode::Enter => {
+                                if raw_active {
+                                    let _ = terminal::disable_raw_mode();
+                                }
+                                print!("\r\n");
+                                let _ = io::stdout().flush();
+                                raw_active = false;
+                                break;
+                            }
+                            KeyCode::Backspace => {
+                                if !input.is_empty() {
+                                    input.pop();
+                                    print!("\x08 \x08");
+                                    let _ = io::stdout().flush();
+                                }
+                            }
+                            KeyCode::Char('\u{3}') | KeyCode::Char('c')
+                                if key.modifiers.contains(KeyModifiers::CONTROL) =>
+                            {
+                                if raw_active {
+                                    let _ = terminal::disable_raw_mode();
+                                }
+                                print!("\r\n");
+                                let _ = io::stdout().flush();
+                                return None;
+                            }
+                            KeyCode::Char(ch) => {
+                                input.push(ch);
+                                print!("*");
+                                let _ = io::stdout().flush();
+                            }
+                            _ => {}
+                        },
+                        Ok(_) => {}
+                        Err(_) => {
+                            if raw_active {
+                                let _ = terminal::disable_raw_mode();
+                            }
+                            print!("\r\n");
+                            let _ = io::stdout().flush();
+                            return None;
+                        }
+                    }
+                }
+
+                if raw_active {
+                    let _ = terminal::disable_raw_mode();
+                }
+
+                if input.is_empty() {
+                    Some(default_value.to_string())
+                } else {
+                    Some(input)
+                }
+            })
         }
 
         for param in parameter_definitions {
-            // println!("param: {:?}", param);
             let JenkinsJobParameter {
                 param_type,
                 name,
@@ -694,39 +788,37 @@ impl JenkinsClient {
             // });
             let (final_value, param_type) = if let Some(choices) = choices {
                 // Use Select to display the Choice list
-                let selection = dialoguer::FuzzySelect::with_theme(&ColorfulTheme::default())
-                    .with_prompt(format!("{}{}", t!("prompt-select", "name" => &fmt_name), fmt_desc))
-                    .items(&choices)
-                    .default(0)
-                    .interact()
-                    .unwrap_or_else(|_e| {
-                        std::process::exit(0);
-                    });
+                let selection = prompt::handle_selection(prompt::with_prompt(|| {
+                    dialoguer::FuzzySelect::with_theme(&ColorfulTheme::default())
+                        .with_prompt(format!("{}{}", t!("prompt-select", "name" => &fmt_name), fmt_desc))
+                        .items(&choices)
+                        .default(0)
+                        .interact()
+                }));
 
-                (choices[selection].clone(), ParamType::Choice)
+                match selection {
+                    Some(idx) => (choices[idx].clone(), ParamType::Choice),
+                    None => return None, // Ctrl+C pressed - go back
+                }
             } else if param_type == Some(ParamType::Boolean) {
                 let default_bool = default_value.parse::<bool>().unwrap_or(false);
-                let value = dialoguer::Confirm::with_theme(&ColorfulTheme::default())
-                    .with_prompt(format!("{}{}", t!("prompt-confirm", "name" => fmt_name), fmt_desc))
-                    .default(default_bool)
-                    .show_default(true)
-                    .interact()
-                    .unwrap_or_else(|_e| {
-                        std::process::exit(0);
-                    });
-                (value.to_string(), ParamType::Boolean)
+                let value = prompt::handle_confirm(prompt::with_prompt(|| {
+                    dialoguer::Confirm::with_theme(&ColorfulTheme::default())
+                        .with_prompt(format!("{}{}", t!("prompt-confirm", "name" => fmt_name), fmt_desc))
+                        .default(default_bool)
+                        .show_default(true)
+                        .interact()
+                }));
+
+                match value {
+                    Some(v) => (v.to_string(), ParamType::Boolean),
+                    None => return None, // Ctrl+C pressed - go back
+                }
             } else if param_type == Some(ParamType::Password) {
-                let input = dialoguer::Password::with_theme(&ColorfulTheme::default())
-                    .with_prompt(format!("{}{}", t!("prompt-password", "name" => &fmt_name), fmt_desc))
-                    .allow_empty_password(true)
-                    .interact()
-                    .unwrap_or_else(|_e| {
-                        std::process::exit(0);
-                    });
-                if input.is_empty() {
-                    (default_value.to_string(), ParamType::Password)
-                } else {
-                    (input, ParamType::Password)
+                match prompt_password_input(&fmt_name, &fmt_desc, &default_value) {
+                    Some(pwd) if pwd.is_empty() => (default_value.to_string(), ParamType::Password),
+                    Some(pwd) => (pwd, ParamType::Password),
+                    None => return None, // Ctrl+C pressed - go back
                 }
             } else if !branches.is_empty()
                 && branch_names
@@ -762,39 +854,38 @@ impl JenkinsClient {
                     // active_item_style: console::Style::new(), // Cancel default style
                     ..ColorfulTheme::default()
                 };
-                let selection = dialoguer::FuzzySelect::with_theme(&custom_theme)
-                    .with_prompt(format!(
-                        "{}{}",
-                        t!("prompt-select-branch", "name" => &fmt_name),
-                        fmt_desc
-                    ))
-                    .items(&branches)
-                    .default(default_selection)
-                    .vim_mode(true) // Esc, j|k
-                    .with_initial_text("")
-                    .interact()
-                    .unwrap_or_else(|_e| {
-                        std::process::exit(0);
-                    });
-                if branches[selection] == manual_input {
-                    (prompt_user_input(&fmt_name, &fmt_desc, "", trim), ParamType::String)
-                } else {
-                    (branches[selection].clone(), ParamType::String)
+                let selected_idx = prompt::handle_selection(prompt::with_prompt(|| {
+                    dialoguer::FuzzySelect::with_theme(&custom_theme)
+                        .with_prompt(format!(
+                            "{}{}",
+                            t!("prompt-select-branch", "name" => &fmt_name),
+                            fmt_desc
+                        ))
+                        .items(&branches)
+                        .default(default_selection)
+                        .vim_mode(true) // Esc, j|k
+                        .with_initial_text("")
+                        .interact()
+                }));
+
+                match selected_idx {
+                    Some(idx) if branches[idx] == manual_input => {
+                        match prompt_user_input(&fmt_name, &fmt_desc, "", trim) {
+                            Some(v) => (v, ParamType::String),
+                            None => return None, // Ctrl+C in manual input
+                        }
+                    }
+                    Some(idx) => (branches[idx].clone(), ParamType::String),
+                    None => return None, // Ctrl+C pressed - go back
                 }
             } else {
                 // For other types, use text input
-                (
-                    prompt_user_input(&fmt_name, &fmt_desc, &default_value, trim),
-                    param_type.unwrap_or(ParamType::String),
-                )
+                match prompt_user_input(&fmt_name, &fmt_desc, &default_value, trim) {
+                    Some(v) => (v, param_type.unwrap_or(ParamType::String)),
+                    None => return None, // Ctrl+C pressed
+                }
             };
 
-            let output_value = if param_type == ParamType::Password {
-                MASKED_PASSWORD.to_string()
-            } else {
-                final_value.clone()
-            };
-            println!("{}", output_value);
             parameters.insert(
                 name,
                 ParamInfo {
@@ -803,7 +894,7 @@ impl JenkinsClient {
                 },
             );
         }
-        parameters
+        Some(parameters)
     }
 
     /// Triggers a build for a specific job on the Jenkins server.
@@ -843,7 +934,6 @@ impl JenkinsClient {
             .get("Location")
             .ok_or_else(|| anyhow!("Missing Location header"))?
             .to_str()?;
-        // println!("Queue location: {}", format_url(&format!("{}/api/json", queue_location)));
         Ok(queue_location.to_string())
     }
 
@@ -855,21 +945,15 @@ impl JenkinsClient {
         event_receiver: &mut mpsc::Receiver<Event>,
     ) -> Result<String, anyhow::Error> {
         let api_url = format_url(&format!("{}/api/json", queue_url));
-        let stop_once = std::sync::Once::new();
-        let spinner = spinner::Spinner::new(t!("polling-queue-item"));
+        let mut spinner = Some(spinner::Spinner::new(t!("polling-queue-item")));
+        let mut paused = false;
 
-        // detect Enter key press
-        let should_exit = std::sync::Arc::new(AtomicBool::new(false));
-        let detection_task = tokio::spawn({
-            let should_exit = should_exit.clone();
-            async move {
-                check_for_enter_key(should_exit).await.unwrap();
-            }
-        });
-
-        let result = loop {
+        loop {
             tokio::select! {
                 _ = delay(2 * 1000) => {
+                    if paused {
+                        continue;
+                    }
                     let response = self.get_with_refresh(&api_url).await?;
                     let queue_item: serde_json::Value = response.json().await?;
                     // println!("{}, queue: {:?}", api_url, queue_item);
@@ -878,28 +962,39 @@ impl JenkinsClient {
                         if let Some(number) = executable["number"].as_i64() {
                             let job_url = self.job_url.as_ref().unwrap();
                             let build_url = format_url(&format!("{}/{}", job_url, number));
-                            stop_once.call_once(|| {
-                                spinner.finish_with_message(format!("Build URL: {}", build_url.underline().blue()));
-                            });
+                            if let Some(sp) = spinner.take() {
+                                sp.finish_with_message(format!("Build URL: {}", build_url.underline().blue()));
+                            } else {
+                                println!("Build URL: {}", build_url.underline().blue());
+                            }
                             break Ok(build_url.to_string());
                         }
                     }
                 },
-                _ = event_receiver.recv() => {
-                    // println!("{}", "poll_queue_item cancelled".red());
-                    stop_once.call_once(|| {
-                        spinner.finish_with_message("".to_string());
-                    });
-                    break Err(anyhow!("cancelled!"));
+                msg = event_receiver.recv() => {
+                    match msg {
+                        Some(Event::StopSpinner) => {
+                            if let Some(sp) = spinner.take() {
+                                sp.finish_with_message("".to_string());
+                            }
+                            paused = true;
+                        }
+                        Some(Event::ResumeSpinner) => {
+                            if spinner.is_none() {
+                                spinner = Some(spinner::Spinner::new(t!("polling-queue-item")));
+                            }
+                            paused = false;
+                        }
+                        Some(Event::CancelPolling) | None => {
+                            if let Some(sp) = spinner.take() {
+                                sp.finish_with_message("".to_string());
+                            }
+                            break Err(anyhow!("cancelled!"));
+                        }
+                    }
                 },
             }
-        };
-
-        // Set exit flag and wait for the enter key detection task to complete
-        should_exit.store(true, Ordering::SeqCst);
-        detection_task.await.unwrap(); // Wait for task completion
-
-        result
+        }
     }
 
     /// Poll the build status until it completes
@@ -918,27 +1013,38 @@ impl JenkinsClient {
         event_receiver: &mut mpsc::Receiver<Event>,
     ) -> Result<(), anyhow::Error> {
         let api_url = format_url(&format!("{}/api/json", build_url));
-        let spinner = spinner::Spinner::new("".to_string());
-        let stop_once = std::sync::Once::new();
+        let mut spinner = Some(spinner::Spinner::new("".to_string()));
+        let mut paused = false;
         let mut last_log_length = 0; // Initialize the length of the last read log
         loop {
             tokio::select! {
                 _ = delay((1000.0 * 0.2) as u64) => {
+                    if paused {
+                        continue;
+                    }
                     let response = self.get_with_refresh(&api_url).await?;
                     let build_info: serde_json::Value = response.json().await?;
 
                     // Retrieve and print the incremental part of Jenkins console log
                     match self.get_jenkins_progressive_text(build_url, last_log_length).await {
                         Ok((log, new_length)) => {
-                            spinner.suspend(|| {
+                            if let Some(sp) = spinner.as_ref() {
+                                sp.suspend(|| {
+                                    print!("{}", log);
+                                });
+                            } else {
                                 print!("{}", log);
-                            });
+                            }
                             last_log_length = new_length;
                         }
                         Err(e) => {
-                            spinner.suspend(|| {
-                              println!("Failed to retrieve console log: {}", e);
-                            });
+                            if let Some(sp) = spinner.as_ref() {
+                                sp.suspend(|| {
+                                  println!("Failed to retrieve console log: {}", e);
+                                });
+                            } else {
+                                println!("Failed to retrieve console log: {}", e);
+                            }
                         }
                     }
 
@@ -947,24 +1053,43 @@ impl JenkinsClient {
                     } else {
                         let result = build_info["result"].as_str().unwrap_or("UNKNOWN"); // or inProgress
                         return if result == "SUCCESS" {
-                            stop_once.call_once(|| {
-                                spinner.finish_with_message(format!("Build result: {}", result.bold().green()));
-                            });
+                            if let Some(sp) = spinner.take() {
+                                sp.finish_with_message(format!("Build result: {}", result.bold().green()));
+                            } else {
+                                println!("Build result: {}", result.bold().green());
+                            }
                             Ok(())
                         } else {
-                            stop_once.call_once(|| {
-                                spinner.finish_with_message(format!("Build result: {}", result.bold().red()));
-                            });
+                            if let Some(sp) = spinner.take() {
+                                sp.finish_with_message(format!("Build result: {}", result.bold().red()));
+                            } else {
+                                println!("Build result: {}", result.bold().red());
+                            }
                             Err(anyhow!(result.red()))
                         };
                     }
                 },
-                _ = event_receiver.recv() => {
-                    // println!("{}", "poll_build_status cancelled".red());
-                    stop_once.call_once(|| {
-                        spinner.finish_with_message("".to_string());
-                    });
-                    return Err(anyhow!("cancelled!"));
+                msg = event_receiver.recv() => {
+                    match msg {
+                        Some(Event::StopSpinner) => {
+                            if let Some(sp) = spinner.take() {
+                                sp.finish_with_message("".to_string());
+                            }
+                            paused = true;
+                        }
+                        Some(Event::ResumeSpinner) => {
+                            if spinner.is_none() {
+                                spinner = Some(spinner::Spinner::new("".to_string()));
+                            }
+                            paused = false;
+                        }
+                        Some(Event::CancelPolling) | None => {
+                            if let Some(sp) = spinner.take() {
+                                sp.finish_with_message("".to_string());
+                            }
+                            return Err(anyhow!("cancelled!"));
+                        }
+                    }
                 },
                 // _ = spawn_and_handle_enter_key() => {
                 // },
@@ -1006,16 +1131,62 @@ impl JenkinsClient {
     }
 
     /// Check if there is an ongoing build and return the build status and number
-    pub async fn is_building(&self) -> Result<(bool, Option<u32>), anyhow::Error> {
+    pub async fn is_building(&self) -> Result<BuildStatus, anyhow::Error> {
         let job_url = self.job_url.as_ref().unwrap();
-        // println!("job_url: {:?}", job_url);
+        let job_api_url = format_url(&format!(
+            "{}/api/json?tree=inQueue,lastBuild[number],lastCompletedBuild[number]",
+            job_url
+        ));
+        let response = self.get_with_refresh(&job_api_url).await?;
+        let job_info: serde_json::Value = response.json().await?;
+
+        let last_build_num = job_info["lastBuild"]["number"].as_u64().map(|n| n as u32);
+        let last_completed_num = job_info["lastCompletedBuild"]["number"].as_u64().map(|n| n as u32);
+        let in_queue = job_info["inQueue"].as_bool().unwrap_or(false);
+
+        if let (Some(last), Some(completed)) = (last_build_num, last_completed_num) {
+            if last > completed {
+                return Ok(BuildStatus {
+                    building: true,
+                    id: Some(last),
+                    last_build: last_build_num,
+                    last_completed: last_completed_num,
+                    in_queue,
+                });
+            }
+        }
+
         let api_url = format_url(&format!("{}/lastBuild/api/json", job_url));
         let response = self.get_with_refresh(&api_url).await?;
         let build_info: serde_json::Value = response.json().await?;
-        // println!("build_info: {:?}", build_info);
         let is_building = build_info["building"].as_bool().unwrap_or(false);
         let build_number = build_info["number"].as_u64().map(|n| n as u32);
-        Ok((is_building, build_number))
+        if !is_building && !in_queue {
+            let builds_api_url = format_url(&format!("{}/api/json?tree=builds[number,building]", job_url));
+            if let Ok(response) = self.get_with_refresh(&builds_api_url).await {
+                if let Ok(builds_info) = response.json::<serde_json::Value>().await {
+                    if let Some(builds) = builds_info["builds"].as_array() {
+                        if let Some(running) = builds.iter().find(|b| b["building"].as_bool().unwrap_or(false)) {
+                            let running_id = running["number"].as_u64().map(|n| n as u32);
+                            return Ok(BuildStatus {
+                                building: true,
+                                id: running_id,
+                                last_build: last_build_num,
+                                last_completed: last_completed_num,
+                                in_queue,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        Ok(BuildStatus {
+            building: is_building,
+            id: build_number,
+            last_build: last_build_num,
+            last_completed: last_completed_num,
+            in_queue,
+        })
     }
     #[allow(dead_code)]
     pub async fn cancel_build(&self, build_number: Option<u32>) -> Result<(), anyhow::Error> {
@@ -1026,7 +1197,6 @@ impl JenkinsClient {
             },
             _ => return Ok(()),
         };
-        // println!("cancel_build: {:?}", api_url);
         match self.post_with_crumb_retry(&api_url, None).await {
             Ok(_response) => {
                 // println!("response: {:?}", _response);
@@ -1046,23 +1216,4 @@ impl JenkinsClient {
         let project: JenkinsJob = response.json().await?;
         Ok(project)
     }
-}
-
-/// Prevent newline when Enter key is pressed
-/// @zh 阻止回车换行. 显示 spinner 时回车, windows不会换行, linux会换行
-#[doc(hidden)]
-async fn check_for_enter_key(should_exit: std::sync::Arc<AtomicBool>) -> Result<(), anyhow::Error> {
-    use crossterm::event::{self, Event, KeyCode};
-    use std::time::Duration;
-    let os = std::env::consts::OS;
-    while !should_exit.load(Ordering::Relaxed) {
-        if event::poll(Duration::from_millis(100))? {
-            if let Event::Key(key_event) = event::read()? {
-                if key_event.code == KeyCode::Enter && os != "windows" {
-                    clear_previous_line(); // Clear the previous line
-                }
-            }
-        }
-    }
-    Ok(())
 }

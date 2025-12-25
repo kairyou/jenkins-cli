@@ -130,7 +130,7 @@ impl CookieStore {
         }
         if crate::utils::debug_enabled() {
             let keys: Vec<_> = updates.iter().map(|(k, _)| k.as_str()).collect();
-            eprintln!("[debug] cookie: applying updates for keys {:?}", keys);
+            crate::utils::debug_line(&format!("[debug] cookie: applying updates for keys {:?}", keys));
         }
 
         let merged = {
@@ -169,9 +169,9 @@ impl CookieStore {
         }
         if crate::utils::debug_enabled() {
             if persisted_result {
-                eprintln!("[debug] cookie: persisted (previous={:?})", previous);
+                crate::utils::debug_line(&format!("[debug] cookie: persisted (previous={:?})", previous));
             } else {
-                eprintln!("[debug] cookie: persist skipped");
+                crate::utils::debug_line("[debug] cookie: persist skipped");
             }
         }
     }

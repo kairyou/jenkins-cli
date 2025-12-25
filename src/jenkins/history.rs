@@ -12,6 +12,7 @@ use crate::constants::{ParamType, MASKED_PASSWORD};
 use crate::i18n::macros::t;
 use crate::jenkins::{JenkinsJobParameter, ParamInfo};
 use crate::migrations::{migrate_history, CURRENT_HISTORY_VERSION};
+use crate::prompt;
 use crate::utils::{self, current_timestamp};
 
 pub const HISTORY_FILE: &str = "history.toml";
@@ -55,7 +56,6 @@ impl History {
             println!("Creating history file: {:?}", file_path);
             fs::File::create(&file_path).context("Failed to create history file")?;
         }
-        // println!("history_file: {:?}", file_path);
         let mut history = Self {
             entries: vec![],
             version: Some(CURRENT_HISTORY_VERSION),
@@ -93,7 +93,6 @@ impl History {
                 Ok(())
             }
             Err(_e) => {
-                // println!("Failed to parse history file: {}", _e);
                 self.entries = vec![];
                 Ok(())
             }
@@ -117,7 +116,6 @@ impl History {
     }
 
     pub fn upsert_history(&mut self, entry: &mut HistoryEntry) -> Result<()> {
-        // println!("upsert_history: {:?}", entry);
         entry.created_at = Some(current_timestamp());
         if let Some(existing_entry) = self.entries.iter_mut().find(|e| Self::matches_entry(e, entry)) {
             *existing_entry = entry.clone();
@@ -176,12 +174,14 @@ impl History {
         }
     }
 
-    /// Display parameter differences and ask user to confirm usage of previous parameters
+    /// Display parameter differences and ask user to confirm usage of previous parameters.
+    /// Returns `Some(true)` if user wants to use previous params, `Some(false)` if not,
+    /// or `None` if user pressed Ctrl+C to go back.
     pub async fn should_use_history_parameters(
         &self,
         history_item: &Option<HistoryEntry>,
         current_parameters: &[JenkinsJobParameter],
-    ) -> bool {
+    ) -> Option<bool> {
         let current_param_names: HashSet<String> = current_parameters.iter().map(|param| param.name.clone()).collect();
 
         // create current parameter choices map, for checking if the choice value is still valid
@@ -190,7 +190,7 @@ impl History {
             .map(|param| (param.name.clone(), param.choices.clone()))
             .collect();
 
-        history_item.as_ref().is_some_and(|history| {
+        history_item.as_ref().map_or(Some(false), |history| {
             let params = history.params.as_ref().unwrap();
             let datetime_str = history.created_at.map(|timestamp| {
                 let utc_datetime = DateTime::from_timestamp(timestamp, 0).unwrap();
@@ -271,13 +271,12 @@ impl History {
                 t!("use-last-build-params")
             };
 
-            dialoguer::Confirm::with_theme(&dialoguer::theme::ColorfulTheme::default())
-                .with_prompt(prompt)
-                .default(!has_param_changes) // when there are changes, default to no, otherwise default to yes
-                .interact()
-                .unwrap_or_else(|_e| {
-                    std::process::exit(0);
-                })
+            prompt::handle_confirm(prompt::with_prompt(|| {
+                dialoguer::Confirm::with_theme(&dialoguer::theme::ColorfulTheme::default())
+                    .with_prompt(prompt)
+                    .default(!has_param_changes) // when there are changes, default to no, otherwise default to yes
+                    .interact()
+            }))
         })
     }
 

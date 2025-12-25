@@ -124,13 +124,22 @@ cargo publish # publish to crates.io
 ### Test
 
 ```bash
-# cargo test
+# Run all tests (unit + integration + doc tests)
+cargo test -v --no-fail-fast
+
+# Run specific integration tests
 cargo test --test test_git_branches -- --nocapture
-cargo test --test test_version_compare -- --nocapture
-cargo test --test test_jenkins_job_parameter -- --nocapture
 cargo test --test test_config -- --nocapture
 cargo test --test test_history -- --nocapture
 cargo test --test test_i18n -- --nocapture
+cargo test --test test_jenkins_job_parameter -- --nocapture
+
+# Run only unit tests (inline tests in src/)
+cargo test --lib
+# Run only integration tests (tests/ directory)
+cargo test --test '*'
+# Run only doc tests
+cargo test --doc
 ```
 
 #### FAQs
