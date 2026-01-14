@@ -4,10 +4,20 @@ on:
   push:
     tags:
       - "v*"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "pretest or edgeone_only"
+        type: choice
+        required: true
+        default: pretest
+        options:
+          - pretest
+          - edgeone_only
 
 jobs:
   release-corss:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'pretest' }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -40,6 +50,7 @@ jobs:
           path: jenkins-${{ matrix.target }}.*
 
   release-windows:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'pretest' }}
     runs-on: windows-latest
     strategy:
       matrix:
@@ -61,6 +72,7 @@ jobs:
           path: jenkins-${{ matrix.target }}.*
 
   release-apple:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'pretest' }}
     runs-on: macos-latest
     strategy:
       matrix:
@@ -96,8 +108,19 @@ jobs:
 
   create-release:
     needs: [release-corss, release-windows, release-apple]
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'pretest' }}
     runs-on: ubuntu-latest
     steps:
+      - name: Resolve release tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.mode }}" = "pretest" ]; then
+            TAG="pretest"
+            echo "PRERELEASE=true" >> "$GITHUB_ENV"
+          else
+            TAG="${{ github.ref_name }}"
+            echo "PRERELEASE=false" >> "$GITHUB_ENV"
+          fi
+          echo "RELEASE_TAG=$TAG" >> "$GITHUB_ENV"
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
@@ -106,10 +129,12 @@ jobs:
           merge-multiple: true
       - name: List artifacts
         run: find artifacts -type f
-      # https://cli.github.com/manual/gh_release_delete
-      - name: Delete existing release
+      - name: Delete existing release (if needed)
         run: |
-          gh release delete ${{ github.ref_name }} --yes || true
+          gh release delete "${RELEASE_TAG}" --yes || true
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.mode }}" = "pretest" ]; then
+            gh api -X DELETE "repos/${GITHUB_REPOSITORY}/git/refs/tags/${RELEASE_TAG}" || true
+          fi
       - name: Create Release
         uses: softprops/action-gh-release@v2
         env:
@@ -117,20 +142,34 @@ jobs:
         with:
           files: artifacts/*
           generate_release_notes: true
+          tag_name: ${{ env.RELEASE_TAG }}
+          target_commitish: ${{ github.sha }}
+          prerelease: ${{ env.PRERELEASE }}
 # "Settings" > "Actions" > "General"
 # "Workflow permissions" > "Read and write permissions"
 
   deploy-edgeone:
     needs: create-release
+    if: >-
+      ${{ always() && ((github.event_name == 'workflow_dispatch' && inputs.mode == 'edgeone_only')
+        || needs.create-release.result == 'success') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Download artifacts
+      - name: Download artifacts (workflow)
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'pretest' }}
         uses: actions/download-artifact@v4
         with:
           path: artifacts
           pattern: jenkins-*
           merge-multiple: true
+      - name: Download artifacts (edgeone_only)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'edgeone_only' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p artifacts
+          gh release download --pattern "jenkins-*" --dir artifacts
       - name: Prepare EdgeOne directory
         run: |
           mkdir -p edgeone_dist/scripts
