@@ -118,3 +118,29 @@ jobs:
           generate_release_notes: true
 # "Settings" > "Actions" > "General"
 # "Workflow permissions" > "Read and write permissions"
+
+  deploy-edgeone:
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: jenkins-*
+          merge-multiple: true
+      - name: Prepare EdgeOne directory
+        run: |
+          mkdir -p edgeone_dist/scripts
+          cp scripts/install.sh edgeone_dist/scripts/install.sh
+          cp artifacts/* edgeone_dist/
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.11.0'
+      - name: Deploy to EdgeOne Pages
+        env:
+          EDGEONE_API_TOKEN: ${{ secrets.EDGEONE_API_TOKEN }}
+          EDGEONE_PROJECT_NAME: ${{ vars.EDGEONE_PROJECT_NAME }}
+        run: npx edgeone pages deploy ./edgeone_dist -n "${EDGEONE_PROJECT_NAME}" -t "${EDGEONE_API_TOKEN}"
