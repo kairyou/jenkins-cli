@@ -68,7 +68,7 @@ jenkins -U http://jenkins.example.com:8081/job/My-Job/ -u username -t api_token
 # 使用 Jenkins 服务器地址运行 - 显示项目列表选择并发布
 jenkins -U http://jenkins.example.com:8081 -u username -t api_token
 
-# 使用 Jenkins Cookie（如 jwt_token） - API token 不可用时使用
+# 使用 Jenkins Cookie（如 jwt_token） - 仅在 API token 不可用时使用
 jenkins -U http://jenkins.example.com:8081 --cookie "jwt_token=your-jwt"
 ```
 
@@ -122,7 +122,7 @@ token = "your-api-token"
   - `includes`: 包含项目的字符串或正则表达式列表 (可选)
   - `excludes`: 排除项目的字符串或正则表达式列表 (可选)
   - `enable_history`: 记录上次的构建参数 (可选), 设置后覆盖全局设置
-  - `cookie`: 可选，Jenkins 认证 Cookie（如 jwt_token=...）。仅在不支持 API Token 时使用。
+  - `cookie`: 可选，Jenkins 认证 Cookie（如 jwt_token=...）。设置后会发送 Cookie 头。
   - `cookie_refresh`: 可选，Cookie 自动更新配置（用于更新 `cookie` 值）
     - `url`: 刷新接口地址
     - `method`: HTTP 方法，默认 "POST"
@@ -143,25 +143,16 @@ token = "your-api-token"
 
 ```toml
 [[jenkins]]
-name = "Query-Refresh"
-url = "https://jenkins-query.example.com"
-cookie = "jwt_token=initial"
+name = "Cookie-Refresh"
+url = "https://jenkins.example.com"
+cookie = "jwt_token=your-jwt"
 
 [jenkins.cookie_refresh]
 url = "https://auth.example.com/api/refresh-token"
 method = "POST"
-request = { query = { refreshToken = "${cookie.jwt_token}" } }
-cookie_updates = { jwt_token = "body.json:data.refreshToken" }
-
-[[jenkins]]
-name = "JSON-Refresh"
-url = "https://jenkins-json.example.com"
-cookie = "jwt_token=initial"
-
-[jenkins.cookie_refresh]
-url = "https://auth.example.com/api/refresh-token"
-method = "POST"
-request = { json = { refreshToken = "${cookie.jwt_token}" } }
+# 选择一种请求方式：
+# request = { query = { refreshToken = "${cookie.jwt_token}" } } # 通过 query 传参
+request = { json = { refreshToken = "${cookie.jwt_token}" } } # 通过 JSON body 传参
 cookie_updates = { jwt_token = "body.json:data.refreshToken" }
 ```
 

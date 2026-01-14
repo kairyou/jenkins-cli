@@ -68,7 +68,7 @@ jenkins -U http://jenkins.example.com:8081/job/My-Job/ -u username -t api_token
 # Run with Jenkins server URL - Show project list for selection and deploy
 jenkins -U http://jenkins.example.com:8081 -u username -t api_token
 
-# Run with Jenkins auth cookie (e.g. jwt_token) - Useful when API token is not accepted
+# Run with Jenkins auth cookie (e.g. jwt_token) - Use only when API token is not accepted
 jenkins -U http://jenkins.example.com:8081 --cookie "jwt_token=your-jwt"
 ```
 
@@ -122,7 +122,7 @@ token = "your-api-token"
   - `includes`: List of strings or regex patterns to include projects (optional)
   - `excludes`: List of strings or regex patterns to exclude projects (optional)
   - `enable_history`: Remember build parameters (optional), overrides global setting if specified
-  - `cookie`: Optional, Jenkins auth cookie (e.g. jwt_token=...). Use only if API tokens are not accepted.
+  - `cookie`: Optional, Jenkins auth cookie (e.g. jwt_token=...). Sends a Cookie header when set.
   - `cookie_refresh`: Optional, cookie auto-update configuration (updates the `cookie` value)
     - `url`: Refresh endpoint URL
     - `method`: HTTP method, default "POST"
@@ -143,25 +143,16 @@ Note: If you have an extra endpoint to refresh cookie values, configure `cookie_
 
 ```toml
 [[jenkins]]
-name = "Query-Refresh"
-url = "https://jenkins-query.example.com"
-cookie = "jwt_token=initial"
+name = "Cookie-Refresh"
+url = "https://jenkins.example.com"
+cookie = "jwt_token=your-jwt"
 
 [jenkins.cookie_refresh]
 url = "https://auth.example.com/api/refresh-token"
 method = "POST"
-request = { query = { refreshToken = "${cookie.jwt_token}" } }
-cookie_updates = { jwt_token = "body.json:data.refreshToken" }
-
-[[jenkins]]
-name = "JSON-Refresh"
-url = "https://jenkins-json.example.com"
-cookie = "jwt_token=initial"
-
-[jenkins.cookie_refresh]
-url = "https://auth.example.com/api/refresh-token"
-method = "POST"
-request = { json = { refreshToken = "${cookie.jwt_token}" } }
+# Pick one request style:
+# request = { query = { refreshToken = "${cookie.jwt_token}" } } # send via query params
+request = { json = { refreshToken = "${cookie.jwt_token}" } } # send via JSON body
 cookie_updates = { jwt_token = "body.json:data.refreshToken" }
 ```
 
