@@ -151,7 +151,7 @@ jobs:
 
   deploy-edgeone:
     needs: create-release
-    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode != 'prerelease') || needs.create-release.result == 'success' }}
+    if: ${{ always() && ((github.event_name == 'workflow_dispatch' && inputs.mode != 'prerelease') || needs.create-release.result == 'success') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
