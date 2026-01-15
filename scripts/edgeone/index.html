@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>jenkins-cli</title>
+    <style>
+      :root { color-scheme: light; }
+      body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; margin: 32px; line-height: 1.5; color: #111827; }
+      h1 { margin: 0 0 8px; font-size: 24px; }
+      p { margin: 8px 0; }
+      code { background: #f3f4f6; padding: 8px 10px; border-radius: 8px; display: inline-block; }
+      ul { padding-left: 18px; }
+      a { color: #1d4ed8; text-decoration: none; }
+      a:hover { text-decoration: underline; }
+    </style>
+  </head>
+  <body>
+    <h1>jenkins-cli</h1>
+    <p>Latest tag: <strong id="latest-tag">loading...</strong></p>
+    <p>Install (EdgeOne mirror):</p>
+    <code id="install-cmd"></code>
+    <p>Files:</p>
+    <ul id="files"></ul>
+    <script>
+      const base = location.origin;
+      const files = [
+        "jenkins-x86_64-unknown-linux-gnu.tar.gz",
+        "jenkins-x86_64-unknown-linux-musl.tar.gz",
+        "jenkins-x86_64-pc-windows-gnu.tar.gz",
+        "jenkins-x86_64-pc-windows-msvc.tar.gz",
+        "jenkins-aarch64-unknown-linux-gnu.tar.gz",
+        "jenkins-aarch64-unknown-linux-musl.tar.gz",
+        "jenkins-x86_64-apple-darwin.tar.gz",
+        "jenkins-aarch64-apple-darwin.tar.gz"
+      ];
+      document.getElementById("install-cmd").textContent =
+        `curl -fsSL ${base}/scripts/install.sh | JENKINS_CLI_BASE_URL=${base} bash`;
+      const list = document.getElementById("files");
+      files.forEach((name) => {
+        const li = document.createElement("li");
+        const a = document.createElement("a");
+        a.href = name;
+        a.textContent = name;
+        li.appendChild(a);
+        list.appendChild(li);
+      });
+      fetch(`${base}/latest.txt`)
+        .then((r) => r.text())
+        .then((t) => {
+          const tag = t.trim();
+          if (tag) document.getElementById("latest-tag").textContent = tag;
+        })
+        .catch(() => {});
+    </script>
+  </body>
+</html>

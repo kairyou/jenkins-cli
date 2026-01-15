@@ -171,10 +171,15 @@ jobs:
           mkdir -p artifacts
           gh release download --pattern "jenkins-*" --dir artifacts
       - name: Prepare EdgeOne directory
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p edgeone_dist/scripts
-          cp scripts/install.sh edgeone_dist/scripts/install.sh
+          cp scripts/edgeone/install.sh edgeone_dist/scripts/install.sh
+          cp scripts/edgeone/index.html edgeone_dist/index.html
           cp artifacts/* edgeone_dist/
+          LATEST_TAG="$(gh release view --json tagName -q .tagName 2>/dev/null || true)"
+          echo "${LATEST_TAG}" > edgeone_dist/latest.txt
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
