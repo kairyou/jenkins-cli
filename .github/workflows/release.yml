@@ -175,10 +175,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p edgeone_dist/scripts
-          mkdir -p edgeone_dist/edge-functions/gh
+          mkdir -p edgeone_dist/edge-functions
           cp scripts/edgeone/install.sh edgeone_dist/scripts/install.sh
           cp scripts/edgeone/index.html edgeone_dist/index.html
-          cp "scripts/edgeone/edge-functions/gh/[[default]].js" "edgeone_dist/edge-functions/gh/[[default]].js"
+          cp -r scripts/edgeone/edge-functions/gh edgeone_dist/edge-functions/
           cp artifacts/* edgeone_dist/
           LATEST_TAG="$(gh release view --json tagName -q .tagName 2>/dev/null || true)"
           echo "${LATEST_TAG}" > edgeone_dist/latest.txt

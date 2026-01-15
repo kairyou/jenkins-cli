@@ -80,13 +80,6 @@ export default async function onRequest(context) {
   let rest = url.pathname.slice(prefix.length);
   if (rest.startsWith("/")) rest = rest.slice(1);
   const parts = rest.split("/").filter(Boolean);
-  if (parts.length === 0) {
-    return new Response("<h1>functions</h1>", {
-      status: 200,
-      headers: { "content-type": "text/html;charset=UTF-8" }
-    });
-  }
-
   let kind = parts[0];
   let pathParts = parts.slice(1);
   if (!BASES[kind]) {
