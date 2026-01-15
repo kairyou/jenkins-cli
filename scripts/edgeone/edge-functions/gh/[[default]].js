@@ -72,12 +72,14 @@ export default async function onRequest(context) {
   }
 
   const url = new URL(request.url);
-  const prefix = "/gh/";
+  const prefix = "/gh";
   if (!url.pathname.startsWith(prefix)) {
     return new Response("Bad Request", { status: 400 });
   }
 
-  const parts = url.pathname.slice(prefix.length).split("/").filter(Boolean);
+  let rest = url.pathname.slice(prefix.length);
+  if (rest.startsWith("/")) rest = rest.slice(1);
+  const parts = rest.split("/").filter(Boolean);
   if (parts.length === 0) {
     return new Response("<h1>functions</h1>", {
       status: 200,
@@ -116,6 +118,15 @@ export default async function onRequest(context) {
     headers,
     redirect: "follow"
   });
+
+  if (upstream.status >= 400) {
+    const body =
+      upstream.status === 404 ? "Not Found" : "Upstream Error";
+    return new Response(body, {
+      status: upstream.status,
+      headers: { "content-type": "text/plain;charset=UTF-8" }
+    });
+  }
 
   const responseHeaders = new Headers(upstream.headers);
   responseHeaders.set("Access-Control-Allow-Origin", "*");
