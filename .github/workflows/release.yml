@@ -13,7 +13,6 @@ on:
         default: edgeone_release
         options:
           - edgeone_release
-          - edge_functions
           - prerelease
 
 jobs:
@@ -151,7 +150,7 @@ jobs:
 
   deploy-edgeone:
     needs: create-release
-    if: ${{ always() && ((github.event_name == 'workflow_dispatch' && inputs.mode != 'prerelease') || needs.create-release.result == 'success') }}
+    if: ${{ always() && ((github.event_name == 'workflow_dispatch' && inputs.mode == 'edgeone_release') || needs.create-release.result == 'success') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -178,11 +177,7 @@ jobs:
           cp scripts/edgeone/install.sh edgeone_dist/scripts/install.sh
           cp scripts/edgeone/index.html edgeone_dist/index.html
           cp -r scripts/edgeone/edge-functions/gh edgeone_dist/edge-functions/
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.mode }}" = "edge_functions" ]; then
-            :
-          else
-            cp artifacts/* edgeone_dist/
-          fi
+          cp artifacts/* edgeone_dist/
           LATEST_TAG="$(gh release view --json tagName -q .tagName 2>/dev/null || true)"
           echo "${LATEST_TAG}" > edgeone_dist/latest.txt
       - name: Setup Node.js
