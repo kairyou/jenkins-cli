@@ -35,7 +35,7 @@
         "jenkins-aarch64-apple-darwin.tar.gz"
       ];
       document.getElementById("install-cmd").textContent =
-        `curl -fsSL ${base}/scripts/install.sh | bash`;
+        `bash <(curl -fsSL ${base}/scripts/install.sh)`;
       const list = document.getElementById("files");
       files.forEach((name) => {
         const li = document.createElement("li");

@@ -7,17 +7,18 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "pretest or edgeone_only"
+        description: "prerelease, edgeone_release, or edge_functions"
         type: choice
         required: true
-        default: pretest
+        default: prerelease
         options:
-          - pretest
-          - edgeone_only
+          - prerelease
+          - edgeone_release
+          - edge_functions
 
 jobs:
   release-corss:
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'pretest' }}
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'prerelease' }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -50,7 +51,7 @@ jobs:
           path: jenkins-${{ matrix.target }}.*
 
   release-windows:
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'pretest' }}
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'prerelease' }}
     runs-on: windows-latest
     strategy:
       matrix:
@@ -72,7 +73,7 @@ jobs:
           path: jenkins-${{ matrix.target }}.*
 
   release-apple:
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'pretest' }}
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'prerelease' }}
     runs-on: macos-latest
     strategy:
       matrix:
@@ -108,13 +109,13 @@ jobs:
 
   create-release:
     needs: [release-corss, release-windows, release-apple]
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'pretest' }}
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'prerelease' }}
     runs-on: ubuntu-latest
     steps:
       - name: Resolve release tag
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.mode }}" = "pretest" ]; then
-            TAG="pretest"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.mode }}" = "prerelease" ]; then
+            TAG="prerelease"
             echo "PRERELEASE=true" >> "$GITHUB_ENV"
           else
             TAG="${{ github.ref_name }}"
@@ -132,7 +133,7 @@ jobs:
       - name: Delete existing release (if needed)
         run: |
           gh release delete "${RELEASE_TAG}" --yes || true
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.mode }}" = "pretest" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.mode }}" = "prerelease" ]; then
             gh api -X DELETE "repos/${GITHUB_REPOSITORY}/git/refs/tags/${RELEASE_TAG}" || true
           fi
       - name: Create Release
@@ -150,21 +151,19 @@ jobs:
 
   deploy-edgeone:
     needs: create-release
-    if: >-
-      ${{ always() && ((github.event_name == 'workflow_dispatch' && inputs.mode == 'edgeone_only')
-        || needs.create-release.result == 'success') }}
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode != 'prerelease') || needs.create-release.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Download artifacts (workflow)
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'pretest' }}
+        if: ${{ github.event_name != 'workflow_dispatch' }}
         uses: actions/download-artifact@v4
         with:
           path: artifacts
           pattern: jenkins-*
           merge-multiple: true
-      - name: Download artifacts (edgeone_only)
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'edgeone_only' }}
+      - name: Download artifacts (edgeone_release)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'edgeone_release' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -179,7 +178,11 @@ jobs:
           cp scripts/edgeone/install.sh edgeone_dist/scripts/install.sh
           cp scripts/edgeone/index.html edgeone_dist/index.html
           cp -r scripts/edgeone/edge-functions/gh edgeone_dist/edge-functions/
-          cp artifacts/* edgeone_dist/
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.mode }}" = "edge_functions" ]; then
+            :
+          else
+            cp artifacts/* edgeone_dist/
+          fi
           LATEST_TAG="$(gh release view --json tagName -q .tagName 2>/dev/null || true)"
           echo "${LATEST_TAG}" > edgeone_dist/latest.txt
       - name: Setup Node.js
