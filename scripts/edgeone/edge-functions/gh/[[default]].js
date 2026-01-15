@@ -127,6 +127,14 @@ export default async function onRequest(context) {
   if (ifNoneMatch) headers.set("if-none-match", ifNoneMatch);
   if (ifModifiedSince) headers.set("if-modified-since", ifModifiedSince);
   headers.set("user-agent", "edgeone-gh-proxy");
+  if (kind === "api") {
+    const token =
+      (context && context.env && context.env.GH_TOKEN) ||
+      globalThis.GH_TOKEN;
+    if (token) {
+      headers.set("authorization", `Bearer ${token}`);
+    }
+  }
 
   const upstream = await fetch(upstreamUrl, {
     method,
