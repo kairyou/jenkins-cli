@@ -7,14 +7,14 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "prerelease, edgeone_release, or edge_functions"
+        description: "Select mode"
         type: choice
         required: true
-        default: prerelease
+        default: edgeone_release
         options:
-          - prerelease
           - edgeone_release
           - edge_functions
+          - prerelease
 
 jobs:
   release-corss:
