@@ -22,6 +22,28 @@ function extractOwner(kind, parts) {
   return null;
 }
 
+function isAllowedPath(kind, parts) {
+  if (kind === "raw") {
+    return parts.length >= 4; // owner/repo/ref/path
+  }
+  if (kind === "gist") {
+    return parts.length >= 3 && parts[2] === "raw";
+  }
+  if (kind === "github") {
+    if (parts.length < 3) return false; // owner/repo/...
+    const rest = parts.slice(2);
+    if (rest[0] === "raw") return true;
+    if (rest[0] === "archive") return true;
+    if (rest[0] === "tarball" || rest[0] === "zipball") return true;
+    if (rest[0] === "releases" && rest[1] === "download") return true;
+    return false;
+  }
+  if (kind === "api") {
+    return true;
+  }
+  return false;
+}
+
 function parseOwners(value) {
   if (!value) return [];
   if (Array.isArray(value)) return value.map(String);
@@ -90,7 +112,7 @@ export default async function onRequest(context) {
 
   const owner = extractOwner(kind, pathParts);
   const allowedOwners = await loadAllowedOwners(context);
-  if (!owner || !allowedOwners.has(owner)) {
+  if (!owner || !allowedOwners.has(owner) || !isAllowedPath(kind, pathParts)) {
     return new Response("Forbidden", { status: 403 });
   }
 
@@ -141,4 +163,5 @@ Notes (examples):
   https://<edgeone>/gh/gist/kairyou/ac3795ad3a19a99fe1201120d5e9b0ff/raw/upstream.sh
 - github.com:
   https://<edgeone>/gh/kairyou/jenkins-cli/raw/refs/heads/main/scripts/install.sh
+  https://<edgeone>/gh/kairyou/jenkins-cli/releases/download/v0.1.21/jenkins-aarch64-apple-darwin.tar.gz
 */
