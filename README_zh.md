@@ -25,10 +25,10 @@
 bash <(curl -fsSL https://raw.githubusercontent.com/kairyou/jenkins-cli/main/scripts/install.sh)
 ```
 
-或使用 ghp.ci 镜像(如果无法访问 GitHub)
+或使用 EdgeOne 镜像(如果无法访问 GitHub)
 
 ```bash
-bash <(curl -fsSL https://ghfast.top/raw.githubusercontent.com/kairyou/jenkins-cli/main/scripts/install.sh)
+bash <(curl -fsSL https://jenkins-cli.xhl.io/scripts/install.sh)
 ```
 
 如果已安装 Rust 和 Cargo，可以直接从 crates.io 安装：

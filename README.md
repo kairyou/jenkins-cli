@@ -25,10 +25,10 @@ To install the Jenkins CLI tool, use one of the following methods:
 bash <(curl -fsSL https://raw.githubusercontent.com/kairyou/jenkins-cli/main/scripts/install.sh)
 ```
 
-Or use ghp.ci mirror (if GitHub is inaccessible)
+Or use EdgeOne mirror (if GitHub is inaccessible)
 
 ```bash
-bash <(curl -fsSL https://ghfast.top/raw.githubusercontent.com/kairyou/jenkins-cli/main/scripts/install.sh)
+bash <(curl -fsSL https://jenkins-cli.xhl.io/scripts/install.sh)
 ```
 
 If you have Rust and Cargo installed, you can install Jenkins CLI directly from crates.io:

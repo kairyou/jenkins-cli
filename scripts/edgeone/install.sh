@@ -6,14 +6,7 @@ DISTRO=$( ([[ -e "/usr/bin/yum" ]] && echo 'CentOS') || ([[ -e "/usr/bin/apt" ]]
 
 IS_WINDOWS=$([[ "$OS" == "mingw"* || "$OS" == "msys"* || "$OS" == "cygwin"*  ]] && echo true || echo false)
 CLI_NAME="jenkins"
-BASE_URL="${JENKINS_CLI_BASE_URL:-}"
-VERSION_OVERRIDE="${JENKINS_CLI_VERSION:-}"
-
-if [[ -z "$BASE_URL" ]]; then
-  echo "JENKINS_CLI_BASE_URL is required (e.g. https://your-edgeone-domain)"
-  exit 1
-fi
-BASE_URL="${BASE_URL%/}"
+BASE_URL="https://jenkins-cli.xhl.io"
 
 cleanup() {
   [[ -f "$FILENAME" ]] && rm "$FILENAME"
@@ -66,10 +59,6 @@ get_filename() {
 }
 
 get_latest_version() {
-  if [[ -n "$VERSION_OVERRIDE" ]]; then
-    echo "$VERSION_OVERRIDE"
-    return
-  fi
   curl -fsSL "${BASE_URL}/latest.txt" | tr -d '[:space:]' || true
 }
 

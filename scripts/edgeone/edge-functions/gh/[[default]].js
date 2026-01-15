@@ -129,3 +129,16 @@ export default async function onRequest(context) {
     headers: responseHeaders
   });
 }
+
+/*
+Notes (examples):
+- raw:
+  https://<edgeone>/gh/raw/kairyou/jenkins-cli/main/scripts/install.sh
+  https://<edgeone>/gh/raw/kairyou/jenkins-cli/refs/heads/main/scripts/install.sh
+- api:
+  https://<edgeone>/gh/api/repos/kairyou/jenkins-cli/releases/latest
+- gist:
+  https://<edgeone>/gh/gist/kairyou/ac3795ad3a19a99fe1201120d5e9b0ff/raw/upstream.sh
+- github.com:
+  https://<edgeone>/gh/kairyou/jenkins-cli/raw/refs/heads/main/scripts/install.sh
+*/
