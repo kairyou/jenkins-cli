@@ -68,9 +68,7 @@ async function loadAllowedOwners(context) {
   }
 
   const owners = new Set(DEFAULT_OWNERS);
-  const kv =
-    (context && context.env && context.env.GH_KV) ||
-    globalThis.GH_KV;
+  const kv = context?.env?.GH_KV || globalThis.GH_KV;
 
   if (kv && typeof kv.get === "function") {
     try {
@@ -128,9 +126,7 @@ export default async function onRequest(context) {
   if (ifModifiedSince) headers.set("if-modified-since", ifModifiedSince);
   headers.set("user-agent", "edgeone-gh-proxy");
   if (kind === "api") {
-    const token =
-      (context && context.env && context.env.GH_TOKEN) ||
-      globalThis.GH_TOKEN;
+    const token = context?.env?.GH_TOKEN || '';
     if (token) {
       headers.set("authorization", `Bearer ${token}`);
     }
