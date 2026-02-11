@@ -35,6 +35,8 @@ function isAllowedPath(kind, parts) {
     if (rest[0] === "raw") return true;
     if (rest[0] === "archive") return true;
     if (rest[0] === "tarball" || rest[0] === "zipball") return true;
+    if (rest[0] === "releases" && rest[1] === "latest" && rest.length === 2) return true;
+    if (rest[0] === "releases" && rest[1] === "tag" && rest.length >= 3) return true;
     if (rest[0] === "releases" && rest[1] === "download") return true;
     return false;
   }
@@ -59,6 +61,29 @@ function parseOwners(value) {
     return trimmed.split(/[,\s]+/).filter(Boolean);
   }
   return [];
+}
+
+function isGithubLatestPath(kind, parts) {
+  if (kind !== "github") return false;
+  if (parts.length !== 4) return false; // owner/repo/releases/latest
+  return parts[2] === "releases" && parts[3] === "latest";
+}
+
+function rewriteLatestLocation(pathParts, location) {
+  if (!location) return null;
+  try {
+    const upstream = new URL(location, BASES.github);
+    const seg = upstream.pathname.split("/").filter(Boolean);
+    if (seg.length < 5) return null;
+    const [owner, repo] = pathParts;
+    if (seg[0] !== owner || seg[1] !== repo) return null;
+    if (seg[2] !== "releases" || seg[3] !== "tag") return null;
+    const tag = seg.slice(4).join("/");
+    if (!tag) return null;
+    return `/gh/${owner}/${repo}/releases/tag/${tag}${upstream.search}`;
+  } catch {
+    return null;
+  }
 }
 
 async function loadAllowedOwners(context) {
@@ -107,6 +132,7 @@ export default async function onRequest(context) {
     pathParts = parts;
   }
   const upstreamBase = BASES[kind];
+  const isLatestRequest = isGithubLatestPath(kind, pathParts);
 
   const owner = extractOwner(kind, pathParts);
   const allowedOwners = await loadAllowedOwners(context);
@@ -135,8 +161,29 @@ export default async function onRequest(context) {
   const upstream = await fetch(upstreamUrl, {
     method,
     headers,
-    redirect: "follow"
+    redirect: isLatestRequest ? "manual" : "follow"
   });
+
+  if (isLatestRequest && upstream.status >= 300 && upstream.status < 400) {
+    const rewrittenLocation = rewriteLatestLocation(pathParts, upstream.headers.get("location"));
+    if (!rewrittenLocation) {
+      return new Response("Upstream Error", {
+        status: 502,
+        headers: { "content-type": "text/plain;charset=UTF-8" }
+      });
+    }
+
+    const redirectHeaders = new Headers();
+    redirectHeaders.set("location", rewrittenLocation);
+    const cacheControl = upstream.headers.get("cache-control");
+    if (cacheControl) redirectHeaders.set("cache-control", cacheControl);
+    redirectHeaders.set("Access-Control-Allow-Origin", "*");
+
+    return new Response(null, {
+      status: upstream.status,
+      headers: redirectHeaders
+    });
+  }
 
   if (upstream.status >= 400) {
     const body =
@@ -167,5 +214,7 @@ Notes (examples):
   https://<edgeone>/gh/gist/kairyou/ac3795ad3a19a99fe1201120d5e9b0ff/raw/upstream.sh
 - github.com:
   https://<edgeone>/gh/kairyou/jenkins-cli/raw/refs/heads/main/scripts/install.sh
+  https://<edgeone>/gh/kairyou/jenkins-cli/releases/latest
+  https://<edgeone>/gh/kairyou/jenkins-cli/releases/tag/v0.1.21
   https://<edgeone>/gh/kairyou/jenkins-cli/releases/download/v0.1.21/jenkins-aarch64-apple-darwin.tar.gz
 */
