@@ -6,7 +6,6 @@ DISTRO=$( ([[ -e "/usr/bin/yum" ]] && echo 'CentOS') || ([[ -e "/usr/bin/apt" ]]
 
 IS_WINDOWS=$([[ "$OS" == "mingw"* || "$OS" == "msys"* || "$OS" == "cygwin"*  ]] && echo true || echo false)
 CLI_NAME="jenkins"
-GITHUB_MIRROR="https://ghfast.top/"
 
 cleanup() {
   [[ -f "$FILENAME" ]] && rm "$FILENAME"
@@ -61,7 +60,7 @@ get_filename() {
 get_latest_version() {
   # local version=$(curl -s "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
   local repo=$1
-  local url="${GITHUB_MIRROR}github.com/${repo}/releases/latest"
+  local url="https://github.com/${repo}/releases/latest"
   local version=$(curl -s -I "$url" | grep -i "^location:" | sed -E 's/.*\/([^/]+)$/\1/' | tr -d '[:space:]')
   echo "${version}"
 }
@@ -78,7 +77,7 @@ main() {
 
     # Download file
     echo "Downloading $FILENAME (version: $VERSION)..."
-    DOWNLOAD_URL="${GITHUB_MIRROR}github.com/${REPO}/releases/download/${VERSION}/${FILENAME}"
+    DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/${FILENAME}"
     curl -#Lo "$FILENAME" "$DOWNLOAD_URL" || { echo "Failed to download $FILENAME"; exit 1; }
 
     # Extract file
