@@ -188,4 +188,8 @@ jobs:
         env:
           EDGEONE_API_TOKEN: ${{ secrets.EDGEONE_API_TOKEN }}
           EDGEONE_PROJECT_NAME: ${{ vars.EDGEONE_PROJECT_NAME }}
-        run: npx edgeone pages deploy ./edgeone_dist -n "${EDGEONE_PROJECT_NAME}" -t "${EDGEONE_API_TOKEN}"
+        run: |
+          test -n "${EDGEONE_API_TOKEN}" || { echo "EDGEONE_API_TOKEN is empty"; exit 1; }
+          EDGEONE_API_TOKEN="$(printf '%s' "${EDGEONE_API_TOKEN}" | tr -d '\r\n')"
+          echo "EDGEONE token length: ${#EDGEONE_API_TOKEN}"
+          npx -y edgeone@1.2.29 pages deploy ./edgeone_dist -n "${EDGEONE_PROJECT_NAME}" -t "${EDGEONE_API_TOKEN}"
