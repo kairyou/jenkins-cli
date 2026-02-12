@@ -45,6 +45,14 @@ pub struct BuildStatus {
     pub in_queue: bool,
 }
 
+#[doc(hidden)]
+pub struct BranchOptionsInput<'a> {
+    pub branches: &'a [String],
+    pub default_branch: Option<&'a str>,
+    pub current_branch: Option<&'a str>,
+    pub manual_input: &'a str,
+}
+
 /// Represents a Jenkins client.
 pub struct JenkinsClient {
     pub base_url: String,
@@ -672,6 +680,34 @@ impl JenkinsClient {
         Ok(parameters)
     }
 
+    /// Build branch picker options for GIT_BRANCH-like parameters.
+    ///
+    /// Order priority is:
+    /// 1) manual input
+    /// 2) default branch
+    /// 3) current local branch
+    /// 4) remaining remote branches
+    ///
+    /// Remove duplicate branch names while preserving first-seen order in the prioritized list.
+    #[doc(hidden)]
+    pub fn build_branch_options(input: BranchOptionsInput<'_>) -> Vec<String> {
+        let mut options = Vec::new();
+        options.push(input.manual_input.to_string());
+        if let Some(default_branch) = input.default_branch.filter(|value| !value.is_empty()) {
+            options.push(default_branch.to_string());
+        }
+        if let Some(current_branch) = input.current_branch.filter(|value| !value.is_empty()) {
+            options.push(current_branch.to_string());
+        }
+        options.extend(input.branches.iter().cloned());
+
+        let mut seen = HashSet::new();
+        options
+            .into_iter()
+            .filter(|branch| seen.insert(branch.clone()))
+            .collect()
+    }
+
     /// Prompts the user to enter values for the given parameter definitions.
     ///
     /// # Arguments
@@ -687,7 +723,7 @@ impl JenkinsClient {
         use dialoguer::theme::ColorfulTheme; // ColorfulTheme/SimpleTheme
         use std::io::{self, Write};
         let mut parameters = HashMap::new();
-        let mut branches = get_git_branches();
+        let branches = get_git_branches();
         let branch_names = ["GIT_BRANCH", "gitBranch"];
 
         // for string, text, password
@@ -852,30 +888,21 @@ impl JenkinsClient {
                     .iter()
                     .any(|&b| name.to_lowercase().contains(&b.to_lowercase()))
             {
-                // branches.retain(|branch| branch != &default_value); // Remove branch
                 // If the parameter name contains GIT_BRANCH
                 let current_branch = get_current_branch();
-                // Add `manual input` option at the front
                 let manual_input = t!("manual-input");
-                branches.insert(0, manual_input.clone());
-                // Move current_branch to the front
-                if let Some(pos) = branches.iter().position(|b| b == &current_branch) {
-                    branches.remove(pos);
-                    branches.insert(1, current_branch.clone());
-                }
-                // Move default branch to the front
-                if !default_value.is_empty() {
-                    if let Some(pos) = branches.iter().position(|b| b == &default_value) {
-                        branches.remove(pos);
-                    }
-                    branches.insert(1, default_value.clone());
-                }
+                let branch_options = Self::build_branch_options(BranchOptionsInput {
+                    branches: &branches,
+                    default_branch: Some(&default_value),
+                    current_branch: Some(&current_branch),
+                    manual_input: &manual_input,
+                });
 
                 // Priority: default_value, then current_branch, finally use 0
-                let default_selection = branches
+                let default_selection = branch_options
                     .iter()
                     .position(|b| b == &default_value)
-                    .or_else(|| branches.iter().position(|b| b == &current_branch))
+                    .or_else(|| branch_options.iter().position(|b| b == &current_branch))
                     .unwrap_or(0);
                 let custom_theme = ColorfulTheme {
                     // active_item_style: console::Style::new(), // Cancel default style
@@ -888,7 +915,7 @@ impl JenkinsClient {
                             t!("prompt-select-branch", "name" => &fmt_name),
                             fmt_desc
                         ))
-                        .items(&branches)
+                        .items(&branch_options)
                         .default(default_selection)
                         .vim_mode(true) // Esc, j|k
                         .with_initial_text("")
@@ -896,13 +923,13 @@ impl JenkinsClient {
                 }));
 
                 match selected_idx {
-                    Some(idx) if branches[idx] == manual_input => {
+                    Some(idx) if branch_options[idx] == manual_input => {
                         match prompt_user_input(&fmt_name, &fmt_desc, "", trim) {
                             Some(v) => (v, ParamType::String),
                             None => return None, // Ctrl+C in manual input
                         }
                     }
-                    Some(idx) => (branches[idx].clone(), ParamType::String),
+                    Some(idx) => (branch_options[idx].clone(), ParamType::String),
                     None => return None, // Ctrl+C pressed - go back
                 }
             } else {
