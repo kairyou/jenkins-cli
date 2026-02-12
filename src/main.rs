@@ -467,16 +467,17 @@ async fn get_project(
 
         notify_if_update_available(); // before select project
 
-        let selection = prompt::handle_selection(prompt::with_prompt(|| {
-            FuzzySelect::with_theme(&ColorfulTheme::default())
-                .with_prompt(t!("select-project-prompt"))
-                .items(&project_names)
-                .default(0)
-                // .report(false) // Display the selected project
-                .vim_mode(true) // Esc, j|k
-                .with_initial_text("")
-                .interact()
-        }));
+        let selection =
+            prompt::handle_selection_opt(prompt::with_prompt_kind(prompt::PromptKind::FuzzySelectVim, || {
+                FuzzySelect::with_theme(&ColorfulTheme::default())
+                    .with_prompt(t!("select-project-prompt"))
+                    .items(&project_names)
+                    .default(0)
+                    // .report(false) // Display the selected project
+                    .vim_mode(true) // Esc, j|k
+                    .with_initial_text("")
+                    .interact_opt()
+            }));
 
         // Check if user pressed Ctrl+C
         match selection {

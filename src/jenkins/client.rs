@@ -733,7 +733,7 @@ impl JenkinsClient {
             default_value: &str,
             trim: Option<bool>,
         ) -> Option<String> {
-            let user_value = prompt::handle_input(prompt::with_prompt(|| {
+            let user_value = prompt::handle_input(prompt::with_prompt_kind(prompt::PromptKind::Input, || {
                 dialoguer::Input::with_theme(&ColorfulTheme::default())
                     .with_prompt(format!("{}{}", t!("prompt-input", "name" => fmt_name), fmt_desc))
                     .with_initial_text(default_value.to_string())
@@ -851,13 +851,14 @@ impl JenkinsClient {
             // });
             let (final_value, param_type) = if let Some(choices) = choices {
                 // Use Select to display the Choice list
-                let selection = prompt::handle_selection(prompt::with_prompt(|| {
-                    dialoguer::FuzzySelect::with_theme(&ColorfulTheme::default())
-                        .with_prompt(format!("{}{}", t!("prompt-select", "name" => &fmt_name), fmt_desc))
-                        .items(&choices)
-                        .default(0)
-                        .interact()
-                }));
+                let selection =
+                    prompt::handle_selection_opt(prompt::with_prompt_kind(prompt::PromptKind::FuzzySelect, || {
+                        dialoguer::FuzzySelect::with_theme(&ColorfulTheme::default())
+                            .with_prompt(format!("{}{}", t!("prompt-select", "name" => &fmt_name), fmt_desc))
+                            .items(&choices)
+                            .default(0)
+                            .interact_opt()
+                    }));
 
                 match selection {
                     Some(idx) => (choices[idx].clone(), ParamType::Choice),
@@ -865,12 +866,13 @@ impl JenkinsClient {
                 }
             } else if param_type == Some(ParamType::Boolean) {
                 let default_bool = default_value.parse::<bool>().unwrap_or(false);
-                let value = prompt::handle_confirm(prompt::with_prompt(|| {
+                let value = prompt::handle_confirm_opt(prompt::with_prompt_kind(prompt::PromptKind::Confirm, || {
                     dialoguer::Confirm::with_theme(&ColorfulTheme::default())
                         .with_prompt(format!("{}{}", t!("prompt-confirm", "name" => fmt_name), fmt_desc))
                         .default(default_bool)
                         .show_default(true)
-                        .interact()
+                        .wait_for_newline(false)
+                        .interact_opt()
                 }));
 
                 match value {
@@ -908,19 +910,20 @@ impl JenkinsClient {
                     // active_item_style: console::Style::new(), // Cancel default style
                     ..ColorfulTheme::default()
                 };
-                let selected_idx = prompt::handle_selection(prompt::with_prompt(|| {
-                    dialoguer::FuzzySelect::with_theme(&custom_theme)
-                        .with_prompt(format!(
-                            "{}{}",
-                            t!("prompt-select-branch", "name" => &fmt_name),
-                            fmt_desc
-                        ))
-                        .items(&branch_options)
-                        .default(default_selection)
-                        .vim_mode(true) // Esc, j|k
-                        .with_initial_text("")
-                        .interact()
-                }));
+                let selected_idx =
+                    prompt::handle_selection_opt(prompt::with_prompt_kind(prompt::PromptKind::FuzzySelectVim, || {
+                        dialoguer::FuzzySelect::with_theme(&custom_theme)
+                            .with_prompt(format!(
+                                "{}{}",
+                                t!("prompt-select-branch", "name" => &fmt_name),
+                                fmt_desc
+                            ))
+                            .items(&branch_options)
+                            .default(default_selection)
+                            .vim_mode(true) // Esc, j|k
+                            .with_initial_text("")
+                            .interact_opt()
+                    }));
 
                 match selected_idx {
                     Some(idx) if branch_options[idx] == manual_input => {

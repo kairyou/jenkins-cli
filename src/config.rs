@@ -149,14 +149,15 @@ pub async fn select_jenkins_service() -> Result<()> {
 
     let selected_config = if services.len() > 1 {
         let service_names: Vec<String> = services.iter().map(|c| c.name.clone()).collect();
-        let selection = prompt::handle_selection(prompt::with_prompt(|| {
-            FuzzySelect::with_theme(&ColorfulTheme::default())
-                .with_prompt(t!("select-jenkins"))
-                .items(&service_names)
-                .default(0)
-                .vim_mode(true) // Esc, j|k
-                .interact()
-        }));
+        let selection =
+            prompt::handle_selection_opt(prompt::with_prompt_kind(prompt::PromptKind::FuzzySelectVim, || {
+                FuzzySelect::with_theme(&ColorfulTheme::default())
+                    .with_prompt(t!("select-jenkins"))
+                    .items(&service_names)
+                    .default(0)
+                    .vim_mode(true) // Esc, j|k
+                    .interact_opt()
+            }));
 
         match selection {
             Some(idx) => services[idx].clone(),

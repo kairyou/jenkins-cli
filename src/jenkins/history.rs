@@ -271,11 +271,12 @@ impl History {
                 t!("use-last-build-params")
             };
 
-            prompt::handle_confirm(prompt::with_prompt(|| {
+            prompt::handle_confirm_opt(prompt::with_prompt_kind(prompt::PromptKind::Confirm, || {
                 dialoguer::Confirm::with_theme(&dialoguer::theme::ColorfulTheme::default())
                     .with_prompt(prompt)
                     .default(!has_param_changes) // when there are changes, default to no, otherwise default to yes
-                    .interact()
+                    .wait_for_newline(false)
+                    .interact_opt()
             }))
         })
     }

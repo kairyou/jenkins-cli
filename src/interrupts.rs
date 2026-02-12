@@ -12,7 +12,8 @@ use crate::spinner;
 use crate::utils::{debug_enabled, debug_line, delay, flush_stdin, prepare_terminal_for_exit, reset_terminal_line};
 
 // Configuration constants.
-const CTRL_C_EXIT_WINDOW_MS: u64 = 800;
+const CTRL_C_DOUBLE_PRESS_WINDOW_MS: u64 = 500;
+const CTRL_C_EVENT_DEDUPE_WINDOW_MS: u64 = 120;
 const CANCEL_MAX_ATTEMPTS: u32 = 10;
 const CANCEL_MAX_WAIT: tokio::time::Duration = tokio::time::Duration::from_secs(30);
 const CANCEL_RETRY_DELAY_MS: u64 = 1000;
@@ -38,6 +39,13 @@ pub enum CtrlCPhase {
     Cancelling = 2,
 }
 
+#[derive(Copy, Clone, PartialEq, Eq)]
+#[repr(u8)]
+enum CtrlCSource {
+    Signal = 1,
+    KeyListener = 2,
+}
+
 pub struct CtrlCControl {
     ctx: Mutex<Option<CtrlCContext>>,
     // Current input/cancel phase used by Ctrl+C handling.
@@ -46,8 +54,11 @@ pub struct CtrlCControl {
     app_running: AtomicBool,
     // Allows main to await completion of cancel flow.
     cancel_notify: Notify,
-    // Used to detect double Ctrl+C exit.
-    last_ctrl_c_ms: std::sync::atomic::AtomicU64,
+    // Used to dedupe duplicate Ctrl+C events from multiple sources.
+    last_event_ms: std::sync::atomic::AtomicU64,
+    last_event_source: AtomicU8,
+    // Used to detect user-intended double Ctrl+C exit (on deduped events).
+    last_press_ms: std::sync::atomic::AtomicU64,
 }
 
 impl CtrlCControl {
@@ -57,7 +68,9 @@ impl CtrlCControl {
             phase: AtomicU8::new(CtrlCPhase::Idle as u8),
             app_running: AtomicBool::new(true),
             cancel_notify: Notify::new(),
-            last_ctrl_c_ms: std::sync::atomic::AtomicU64::new(0),
+            last_event_ms: std::sync::atomic::AtomicU64::new(0),
+            last_event_source: AtomicU8::new(0),
+            last_press_ms: std::sync::atomic::AtomicU64::new(0),
         }
     }
 
@@ -114,12 +127,28 @@ impl CtrlCControl {
             .map(|state| (state.client.clone(), state.event_sender.clone()))
     }
 
-    pub fn should_force_exit(&self, window_ms: u64) -> bool {
-        let now_ms = std::time::SystemTime::now()
+    fn now_ms() -> u64 {
+        std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
-            .as_millis() as u64;
-        let prev = self.last_ctrl_c_ms.swap(now_ms, Ordering::SeqCst);
+            .as_millis() as u64
+    }
+
+    fn is_duplicate_event(&self, source: CtrlCSource, window_ms: u64) -> bool {
+        let now_ms = Self::now_ms();
+        let prev_ms = self.last_event_ms.load(Ordering::SeqCst);
+        let prev_source = self.last_event_source.load(Ordering::SeqCst);
+        let duplicated = prev_source != 0 && prev_source != source as u8 && now_ms.saturating_sub(prev_ms) <= window_ms;
+        if !duplicated {
+            self.last_event_ms.store(now_ms, Ordering::SeqCst);
+            self.last_event_source.store(source as u8, Ordering::SeqCst);
+        }
+        duplicated
+    }
+
+    pub fn should_force_exit(&self, window_ms: u64) -> bool {
+        let now_ms = Self::now_ms();
+        let prev = self.last_press_ms.swap(now_ms, Ordering::SeqCst);
         now_ms.saturating_sub(prev) <= window_ms
     }
 
@@ -170,15 +199,22 @@ pub async fn handle_ctrl_c(mut ctrlc_rx: mpsc::UnboundedReceiver<()>) {
     use crossterm::terminal;
     use tokio::signal;
 
-    // Central Ctrl+C loop: selection is handled by dialoguer, polling prompts the cancel flow.
+    // Central Ctrl+C loop:
+    // - Selection/idle phase: translate Ctrl+C into prompt back navigation when possible.
+    // - Polling/cancelling phase: prompt for build cancellation and support force-exit.
     loop {
-        let detected = tokio::select! {
-            _ = signal::ctrl_c() => true,
-            msg = ctrlc_rx.recv() => msg.is_some(),
-            _ = tokio::time::sleep(tokio::time::Duration::from_millis(100)) => false,
+        let source = tokio::select! {
+            _ = signal::ctrl_c() => Some(CtrlCSource::Signal),
+            msg = ctrlc_rx.recv() => msg.map(|_| CtrlCSource::KeyListener),
+            _ = tokio::time::sleep(tokio::time::Duration::from_millis(100)) => None,
         };
 
-        if !detected {
+        let Some(source) = source else {
+            continue;
+        };
+
+        if CTRL_C.is_duplicate_event(source, CTRL_C_EVENT_DEDUPE_WINDOW_MS) {
+            debug_ctrlc!("deduped duplicate event, phase={}", CTRL_C.phase_label());
             continue;
         }
 
@@ -187,7 +223,29 @@ pub async fn handle_ctrl_c(mut ctrlc_rx: mpsc::UnboundedReceiver<()>) {
         }
 
         if CTRL_C.phase() != CtrlCPhase::Polling {
-            if CTRL_C.should_force_exit(CTRL_C_EXIT_WINDOW_MS) {
+            if prompt::is_prompting() {
+                #[cfg(windows)]
+                {
+                    debug_ctrlc!("received during prompt, requesting back");
+                    if CTRL_C.should_force_exit(CTRL_C_DOUBLE_PRESS_WINDOW_MS) {
+                        force_exit();
+                    }
+                    prompt::request_prompt_back();
+                }
+                #[cfg(not(windows))]
+                {
+                    debug_ctrlc!("received during prompt, waiting for dialoguer interrupt");
+                    if CTRL_C.should_force_exit(CTRL_C_DOUBLE_PRESS_WINDOW_MS) {
+                        force_exit();
+                    }
+                }
+                // Prompt stage behavior:
+                // - single press: back
+                // - double press (deduped): force exit
+                continue;
+            }
+
+            if CTRL_C.should_force_exit(CTRL_C_DOUBLE_PRESS_WINDOW_MS) {
                 force_exit();
             }
             continue;
@@ -210,7 +268,7 @@ pub async fn handle_ctrl_c(mut ctrlc_rx: mpsc::UnboundedReceiver<()>) {
         flush_stdin();
 
         let prompt = t!("cancel-build-prompt").red().bold().to_string();
-        let confirm = prompt::handle_confirm(prompt::with_prompt(|| {
+        let confirm = prompt::handle_confirm(prompt::with_prompt_kind(prompt::PromptKind::Confirm, || {
             dialoguer::Confirm::new().with_prompt(prompt).default(false).interact()
         }));
 
@@ -494,5 +552,19 @@ mod tests {
         let ctrl = CtrlCControl::new();
         assert!(!ctrl.should_force_exit(1_000));
         assert!(ctrl.should_force_exit(1_000));
+    }
+
+    #[test]
+    fn dedupe_filters_quick_duplicate_events() {
+        let ctrl = CtrlCControl::new();
+        assert!(!ctrl.is_duplicate_event(super::CtrlCSource::Signal, 1_000));
+        assert!(ctrl.is_duplicate_event(super::CtrlCSource::KeyListener, 1_000));
+    }
+
+    #[test]
+    fn dedupe_does_not_drop_same_source_events() {
+        let ctrl = CtrlCControl::new();
+        assert!(!ctrl.is_duplicate_event(super::CtrlCSource::Signal, 1_000));
+        assert!(!ctrl.is_duplicate_event(super::CtrlCSource::Signal, 1_000));
     }
 }

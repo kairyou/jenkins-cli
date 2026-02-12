@@ -79,8 +79,16 @@ impl StepTracker {
 pub fn handle_back_and_route(steps: &mut StepTracker, exit_msg: &str) -> RouteAction {
     // Resolve Ctrl+C back/exit for the current step.
     match steps.back() {
-        Some(route) => route,
+        Some(route) => {
+            let label = match route {
+                RouteAction::ReturnService => "service",
+                RouteAction::ContinueProject => "project",
+            };
+            crate::utils::debug_line(&format!("[debug] flow: Ctrl+C route -> {}", label));
+            route
+        }
         None => {
+            crate::utils::debug_line("[debug] flow: Ctrl+C route -> exit");
             crate::utils::prepare_terminal_for_exit();
             println!("{}", exit_msg);
             std::process::exit(0);

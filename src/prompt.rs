@@ -1,12 +1,71 @@
 /// Prompt helpers with Ctrl+C support.
 use std::error::Error;
 use std::io::ErrorKind;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
 static PROMPTING: AtomicBool = AtomicBool::new(false);
+static PROMPT_KIND: AtomicU8 = AtomicU8::new(PromptKind::Other as u8);
+#[cfg(windows)]
+static INPUT_INTERRUPT_REQUESTED: AtomicBool = AtomicBool::new(false);
+
+#[derive(Copy, Clone, PartialEq, Eq)]
+#[repr(u8)]
+pub enum PromptKind {
+    Other = 0,
+    FuzzySelect = 1,
+    FuzzySelectVim = 2,
+    Confirm = 3,
+    Input = 4,
+}
+
+impl PromptKind {
+    #[cfg(windows)]
+    fn from_u8(v: u8) -> Self {
+        match v {
+            1 => PromptKind::FuzzySelect,
+            2 => PromptKind::FuzzySelectVim,
+            3 => PromptKind::Confirm,
+            4 => PromptKind::Input,
+            _ => PromptKind::Other,
+        }
+    }
+}
+
+struct PromptStateGuard {
+    prev_prompting: bool,
+    prev_kind: u8,
+}
+
+impl PromptStateGuard {
+    fn enter(kind: PromptKind) -> Self {
+        #[cfg(windows)]
+        INPUT_INTERRUPT_REQUESTED.store(false, Ordering::SeqCst);
+        let prev_prompting = PROMPTING.swap(true, Ordering::SeqCst);
+        let prev_kind = PROMPT_KIND.swap(kind as u8, Ordering::SeqCst);
+        Self {
+            prev_prompting,
+            prev_kind,
+        }
+    }
+}
+
+impl Drop for PromptStateGuard {
+    fn drop(&mut self) {
+        PROMPT_KIND.store(self.prev_kind, Ordering::SeqCst);
+        PROMPTING.store(self.prev_prompting, Ordering::SeqCst);
+    }
+}
 
 /// Run a prompt while marking user input as active (prevents other readers from stealing input).
 pub fn with_prompt<F, R>(f: F) -> R
+where
+    F: FnOnce() -> R,
+{
+    with_prompt_kind(PromptKind::Other, f)
+}
+
+/// Run a prompt with explicit prompt-kind metadata (used for Ctrl+C compatibility paths).
+pub fn with_prompt_kind<F, R>(kind: PromptKind, f: F) -> R
 where
     F: FnOnce() -> R,
 {
@@ -16,15 +75,141 @@ where
     eprint!("\r\x1b[2K");
     let _ = io::stderr().flush();
 
-    PROMPTING.store(true, Ordering::SeqCst);
-    let result = f();
-    PROMPTING.store(false, Ordering::SeqCst);
-    result
+    let _prompt_guard = PromptStateGuard::enter(kind);
+    f()
 }
 
 /// Whether a dialoguer prompt is currently active.
 pub fn is_prompting() -> bool {
     PROMPTING.load(Ordering::SeqCst)
+}
+
+#[cfg(windows)]
+fn current_prompt_kind() -> PromptKind {
+    PromptKind::from_u8(PROMPT_KIND.load(Ordering::SeqCst))
+}
+
+#[cfg(windows)]
+fn current_prompt_kind_label() -> &'static str {
+    match current_prompt_kind() {
+        PromptKind::Other => "other",
+        PromptKind::FuzzySelect => "fuzzy",
+        PromptKind::FuzzySelectVim => "fuzzy-vim",
+        PromptKind::Confirm => "confirm",
+        PromptKind::Input => "input",
+    }
+}
+
+/// Best-effort helper used by the global Ctrl+C handler during prompt input.
+/// On Windows, inject a key sequence (Esc or Esc+q) so dialoguer `interact_opt()`
+/// prompts can back out cleanly instead of terminating the process.
+#[cfg(windows)]
+pub fn request_prompt_back() {
+    let (ok, label) = match current_prompt_kind() {
+        PromptKind::FuzzySelectVim => (
+            inject_key_sequence(&[InjectedKey::escape(), InjectedKey::char('q')]),
+            "ESC+q",
+        ),
+        PromptKind::Confirm => (inject_key_sequence(&[InjectedKey::escape()]), "ESC"),
+        PromptKind::Input => (inject_key_sequence(&[InjectedKey::enter()]), "Enter(input-interrupt)"),
+        _ => (inject_key_sequence(&[InjectedKey::escape()]), "ESC"),
+    };
+    if ok && matches!(current_prompt_kind(), PromptKind::Input) {
+        INPUT_INTERRUPT_REQUESTED.store(true, Ordering::SeqCst);
+    } else if !ok {
+        INPUT_INTERRUPT_REQUESTED.store(false, Ordering::SeqCst);
+    }
+    if ok {
+        crate::utils::debug_line(&format!(
+            "[debug] prompt: kind={} injected {} for Ctrl+C",
+            current_prompt_kind_label(),
+            label
+        ));
+    } else {
+        crate::utils::debug_line(&format!(
+            "[debug] prompt: kind={} failed to inject {} for Ctrl+C",
+            current_prompt_kind_label(),
+            label
+        ));
+    }
+}
+
+#[cfg(windows)]
+#[derive(Copy, Clone)]
+struct InjectedKey {
+    vk: u16,
+    unicode_char: u16,
+}
+
+#[cfg(windows)]
+impl InjectedKey {
+    fn escape() -> Self {
+        Self {
+            vk: 0x1B,
+            unicode_char: 0x1B,
+        }
+    }
+
+    fn char(ch: char) -> Self {
+        let c = ch as u32;
+        let unicode = u16::try_from(c).unwrap_or_default();
+        let vk = if ch.is_ascii_alphabetic() {
+            ch.to_ascii_uppercase() as u16
+        } else if ch.is_ascii_digit() {
+            ch as u16
+        } else {
+            0
+        };
+        Self {
+            vk,
+            unicode_char: unicode,
+        }
+    }
+
+    fn enter() -> Self {
+        Self {
+            vk: 0x0D,           // VK_RETURN
+            unicode_char: 0x0D, // '\r'
+        }
+    }
+}
+
+#[cfg(windows)]
+fn inject_key_sequence(keys: &[InjectedKey]) -> bool {
+    use std::mem;
+    use winapi::shared::minwindef::DWORD;
+    use winapi::um::handleapi::INVALID_HANDLE_VALUE;
+    use winapi::um::processenv::GetStdHandle;
+    use winapi::um::winbase::STD_INPUT_HANDLE;
+    use winapi::um::wincon::{WriteConsoleInputW, INPUT_RECORD, KEY_EVENT};
+
+    unsafe fn make_key_event(key_spec: InjectedKey, is_key_down: i32) -> INPUT_RECORD {
+        let mut record: INPUT_RECORD = mem::zeroed();
+        record.EventType = KEY_EVENT;
+        let key = record.Event.KeyEvent_mut();
+        (*key).bKeyDown = is_key_down;
+        (*key).wRepeatCount = 1;
+        (*key).wVirtualKeyCode = key_spec.vk;
+        (*key).wVirtualScanCode = 0;
+        *(*key).uChar.UnicodeChar_mut() = key_spec.unicode_char;
+        (*key).dwControlKeyState = 0;
+        record
+    }
+
+    unsafe {
+        let handle = GetStdHandle(STD_INPUT_HANDLE);
+        if handle.is_null() || handle == INVALID_HANDLE_VALUE {
+            return false;
+        }
+        let mut records = Vec::with_capacity(keys.len() * 2);
+        for key_spec in keys {
+            records.push(make_key_event(*key_spec, 1));
+            records.push(make_key_event(*key_spec, 0));
+        }
+        let mut written: DWORD = 0;
+        let ok = WriteConsoleInputW(handle, records.as_ptr(), records.len() as DWORD, &mut written);
+        ok != 0 && written == records.len() as DWORD
+    }
 }
 
 /// Check if error is an interrupted error (Ctrl+C)
@@ -63,16 +248,15 @@ fn is_interrupted_error(e: &dialoguer::Error) -> bool {
     false
 }
 
-/// Handle dialoguer Result, converting interrupted errors to None
-/// This allows Ctrl+C to act as "go back" in selection prompts
-pub fn handle_selection<T>(result: Result<T, dialoguer::Error>) -> Option<T> {
+/// Handle dialoguer optional selection Result (`interact_opt`) where Esc/q can return `None`.
+pub fn handle_selection_opt<T>(result: Result<Option<T>, dialoguer::Error>) -> Option<T> {
     match result {
-        Ok(value) => Some(value),
+        Ok(value) => value,
         Err(e) => {
             if is_interrupted_error(&e) {
+                crate::utils::debug_line("[debug] prompt: interrupted (selection)");
                 return None; // Ctrl+C pressed - go back
             }
-            // Not an interrupted error, exit
             eprintln!("Selection error: {}", e);
             std::process::exit(1);
         }
@@ -85,6 +269,22 @@ pub fn handle_confirm(result: Result<bool, dialoguer::Error>) -> Option<bool> {
         Ok(value) => Some(value),
         Err(e) => {
             if is_interrupted_error(&e) {
+                crate::utils::debug_line("[debug] prompt: interrupted (confirm)");
+                return None; // Ctrl+C pressed - go back
+            }
+            eprintln!("Confirmation error: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+/// Handle dialoguer optional confirm Result (`interact_opt`) where Esc/q can return `None`.
+pub fn handle_confirm_opt(result: Result<Option<bool>, dialoguer::Error>) -> Option<bool> {
+    match result {
+        Ok(value) => value,
+        Err(e) => {
+            if is_interrupted_error(&e) {
+                crate::utils::debug_line("[debug] prompt: interrupted (confirm)");
                 return None; // Ctrl+C pressed - go back
             }
             eprintln!("Confirmation error: {}", e);
@@ -96,11 +296,21 @@ pub fn handle_confirm(result: Result<bool, dialoguer::Error>) -> Option<bool> {
 /// Handle dialoguer input Result (for String inputs)
 pub fn handle_input(result: Result<String, dialoguer::Error>) -> Option<String> {
     match result {
-        Ok(value) => Some(value),
+        Ok(value) => {
+            #[cfg(windows)]
+            if INPUT_INTERRUPT_REQUESTED.swap(false, Ordering::SeqCst) {
+                crate::utils::debug_line("[debug] prompt: interrupted (input via injected Enter)");
+                return None;
+            }
+            Some(value)
+        }
         Err(e) => {
             if is_interrupted_error(&e) {
+                crate::utils::debug_line("[debug] prompt: interrupted (input)");
                 return None; // Ctrl+C pressed - go back
             }
+            #[cfg(windows)]
+            INPUT_INTERRUPT_REQUESTED.store(false, Ordering::SeqCst);
             eprintln!("Input error: {}", e);
             std::process::exit(1);
         }
