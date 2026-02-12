@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct Config {
@@ -65,5 +66,7 @@ pub struct CookieRefreshRequest {
     #[serde(default)]
     pub form: std::collections::HashMap<String, String>,
     #[serde(default)]
-    pub json: std::collections::HashMap<String, String>,
+    pub json: JsonValue,
+    #[serde(default)]
+    pub headers: std::collections::HashMap<String, String>,
 }

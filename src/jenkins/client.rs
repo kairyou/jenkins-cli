@@ -8,9 +8,10 @@ use tokio::sync::mpsc;
 
 use regex::Regex;
 use reqwest::{
-    header::{HeaderMap, HeaderName, HeaderValue, AUTHORIZATION, COOKIE},
+    header::{HeaderMap, HeaderName, HeaderValue, AUTHORIZATION, CONTENT_TYPE, COOKIE},
     StatusCode,
 };
+use serde_json::Value as JsonValue;
 
 // use super::{JenkinsJob, JenkinsResponse, JenkinsJobConfig, JenkinsJobParameter};
 use crate::constants::{
@@ -327,15 +328,17 @@ impl JenkinsClient {
         // Resolve template variables in request params (e.g. ${cookie.jwt_token}).
         let query = self.resolve_params(&config.request.query)?;
         let form = self.resolve_params(&config.request.form)?;
-        let json = self.resolve_params(&config.request.json)?;
-        if !form.is_empty() && !json.is_empty() {
+        let json = self.resolve_json_value(&config.request.json)?;
+        let has_json_body = !json.is_null();
+        if !form.is_empty() && has_json_body {
             return Err(anyhow!("cookie_refresh.request cannot include both form and json"));
         }
-        if method.eq_ignore_ascii_case("GET") && (!form.is_empty() || !json.is_empty()) {
+        if method.eq_ignore_ascii_case("GET") && (!form.is_empty() || has_json_body) {
             return Err(anyhow!("cookie_refresh.request body is not allowed for GET"));
         }
 
-        let headers = self.build_headers(false, None)?;
+        let extra_headers = self.resolve_params(&config.request.headers)?;
+        let mut headers = self.build_headers(false, Some(extra_headers))?;
         let resolved_url = self.resolve_template(&config.url)?;
         if crate::utils::debug_enabled() {
             let mut debug_url = resolved_url.clone();
@@ -349,12 +352,15 @@ impl JenkinsClient {
             if let Some(value) = headers.get(COOKIE).and_then(|v| v.to_str().ok()) {
                 crate::utils::debug_line(&format!("[debug] cookie_refresh: request_header_cookie={}", value));
             }
-            if !query.is_empty() || !form.is_empty() || !json.is_empty() {
+            if !query.is_empty() || !form.is_empty() || has_json_body {
                 crate::utils::debug_line(&format!(
                     "[debug] cookie_refresh: params query={:?} form={:?} json={:?}",
                     query, form, json
                 ));
             }
+        }
+        if has_json_body && !headers.contains_key(CONTENT_TYPE) {
+            headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
         }
         let mut request = self
             .client
@@ -363,7 +369,7 @@ impl JenkinsClient {
         if !query.is_empty() {
             request = request.query(&query);
         }
-        if !json.is_empty() {
+        if has_json_body {
             request = request.json(&json);
         } else if !form.is_empty() {
             request = request.form(&form);
@@ -404,6 +410,27 @@ impl JenkinsClient {
             resolved.insert(key.clone(), self.resolve_template(value)?);
         }
         Ok(resolved)
+    }
+
+    fn resolve_json_value(&self, value: &JsonValue) -> Result<JsonValue> {
+        match value {
+            JsonValue::String(text) => Ok(JsonValue::String(self.resolve_template(text)?)),
+            JsonValue::Array(items) => {
+                let mut resolved = Vec::with_capacity(items.len());
+                for item in items {
+                    resolved.push(self.resolve_json_value(item)?);
+                }
+                Ok(JsonValue::Array(resolved))
+            }
+            JsonValue::Object(map) => {
+                let mut resolved = serde_json::Map::with_capacity(map.len());
+                for (key, item) in map {
+                    resolved.insert(key.clone(), self.resolve_json_value(item)?);
+                }
+                Ok(JsonValue::Object(resolved))
+            }
+            _ => Ok(value.clone()),
+        }
     }
 
     // Extract cookie updates from response by spec (body.json / body.regex / header).

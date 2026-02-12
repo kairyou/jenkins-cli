@@ -74,7 +74,12 @@ pub async fn initialize_config(matches: &clap::ArgMatches) -> Result<(GlobalConf
     let has_valid_auth = |c: &JenkinsConfig| {
         let has_basic = !c.user.is_empty() && !c.token.is_empty();
         let has_cookie = !c.cookie.is_empty();
-        has_cookie || has_basic
+        let has_cookie_refresh = c
+            .cookie_refresh
+            .as_ref()
+            .map(|refresh| !refresh.url.trim().is_empty())
+            .unwrap_or(false);
+        has_cookie || has_basic || has_cookie_refresh
     };
 
     if url_arg.is_none()

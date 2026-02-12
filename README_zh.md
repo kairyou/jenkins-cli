@@ -127,9 +127,10 @@ token = "your-api-token"
     - `url`: 刷新接口地址
     - `method`: HTTP 方法，默认 "POST"
     - `request`: 可选，请求参数（用 `cookie` 字段中的值替换 `${cookie.<name>}` 变量）：
+      - `headers`: 可选，额外请求头（例如 `X-Client-Id = "your-client-id"`）
       - `query`: URL query 参数
       - `form`: x-www-form-urlencoded 表单参数
-      - `json`: JSON body 参数
+      - `json`: JSON body 参数（支持 string/number/boolean/object/array）
     - `cookie_updates`: 可选，从响应中提取并写回 `cookie` 字段的值：
       - `body.json:<path>`：JSON body 路径，例如 `body.json:data.refreshToken`
       - `header:<name>`：响应头名称，例如 `header:X-JWT-Token`
@@ -151,9 +152,25 @@ cookie = "jwt_token=your-jwt"
 url = "https://auth.example.com/api/refresh-token"
 method = "POST"
 # 选择一种请求方式：
-# request = { query = { refreshToken = "${cookie.jwt_token}" } } # 通过 query 传参
-request = { json = { refreshToken = "${cookie.jwt_token}" } } # 通过 JSON body 传参
+# request.query = { refreshToken = "${cookie.jwt_token}" } # 通过 query 传参
+request.json = { refreshToken = "${cookie.jwt_token}" } # 通过 JSON body 传参
 cookie_updates = { jwt_token = "body.json:data.refreshToken" }
+```
+
+登录接口示例（token 从 JSON body 返回）：
+
+```toml
+[[jenkins]]
+name = "login-refresh"
+url = "https://jenkins.example.com"
+
+[jenkins.cookie_refresh]
+url = "https://auth.example.com/api/auth/login"
+method = "POST"
+# 可选自定义请求头：
+# request.headers = { X-Client-Id = "your-client-id" }
+request.json = { username = "your-username", password = "your-encrypted-password", remember = true }
+cookie_updates = { jwt_token = "body.json:data.token" }
 ```
 
 ### 项目过滤

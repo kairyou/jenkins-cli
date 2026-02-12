@@ -127,9 +127,10 @@ token = "your-api-token"
     - `url`: Refresh endpoint URL
     - `method`: HTTP method, default "POST"
     - `request`: Optional, request parameters (replaces `${cookie.<name>}` placeholders with values from the `cookie` field):
+      - `headers`: Optional, extra request headers (for example `X-Client-Id = "your-client-id"`)
       - `query`: URL query parameters
       - `form`: x-www-form-urlencoded body parameters
-      - `json`: JSON body parameters
+      - `json`: JSON body payload (supports string/number/boolean/object/array)
     - `cookie_updates`: Optional, cookie updates extracted from the response (written back to the `cookie` field):
       - `body.json:<path>`: JSON body path, e.g. `body.json:data.refreshToken`
       - `header:<name>`: Response header name, e.g. `header:X-JWT-Token`
@@ -151,9 +152,25 @@ cookie = "jwt_token=your-jwt"
 url = "https://auth.example.com/api/refresh-token"
 method = "POST"
 # Pick one request style:
-# request = { query = { refreshToken = "${cookie.jwt_token}" } } # send via query params
-request = { json = { refreshToken = "${cookie.jwt_token}" } } # send via JSON body
+# request.query = { refreshToken = "${cookie.jwt_token}" } # send via query params
+request.json = { refreshToken = "${cookie.jwt_token}" } # send via JSON body
 cookie_updates = { jwt_token = "body.json:data.refreshToken" }
+```
+
+Login API example (token returned in JSON body):
+
+```toml
+[[jenkins]]
+name = "Login-Refresh"
+url = "https://jenkins.example.com"
+
+[jenkins.cookie_refresh]
+url = "https://auth.example.com/api/auth/login"
+method = "POST"
+# Optional custom headers:
+# request.headers = { X-Client-Id = "your-client-id" }
+request.json = { username = "your-username", password = "your-encrypted-password", remember = true }
+cookie_updates = { jwt_token = "body.json:data.token" }
 ```
 
 ### Project Filtering
