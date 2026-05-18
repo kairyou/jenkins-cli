@@ -109,8 +109,9 @@ cargo build --target x86_64-unknown-linux-gnu --release # build for linux
 # = Release
 # rustup update stable
 cargo test -v --no-fail-fast # test
-cargo clippy # --fix --allow-dirty # Static code analysis - Check for potential errors/performance issues/code style
 cargo fmt -- --check # Check code formatting
+# Static code analysis - Check for potential errors/performance issues/code style
+cargo clippy --all-targets --all-features -- -D warnings # --fix --allow-dirty
 # cargo doc --no-deps # Generate documentation
 # python3 -m http.server 8000 -d ./target/doc/jenkins/ # Preview documentation
 

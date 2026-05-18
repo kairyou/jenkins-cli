@@ -256,12 +256,10 @@ pub fn password_input(prompt_text: &str, default_value: &str) -> Option<String> 
                         raw_active = false;
                         break;
                     }
-                    KeyCode::Backspace => {
-                        if !input.is_empty() {
-                            input.pop();
-                            print!("\x08 \x08");
-                            let _ = io::stdout().flush();
-                        }
+                    KeyCode::Backspace if !input.is_empty() => {
+                        input.pop();
+                        print!("\x08 \x08");
+                        let _ = io::stdout().flush();
                     }
                     KeyCode::Char('\u{3}') | KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                         if raw_active {
