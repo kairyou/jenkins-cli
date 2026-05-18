@@ -1,14 +1,15 @@
-select-project-prompt = Please select a project to deploy
+select-project-prompt = Select a project to deploy
 select-project-failed = Failed to select project
 get-projects-failed = Failed to get projects
 get-job-parameters-failed = Failed to get job parameters
 get-project-failed = Failed to get project info
 
-prompt-input = Please enter {$name}
-prompt-select = Please select {$name}
-prompt-confirm = Please confirm {$name}
-prompt-password = Please enter {$name} (press Enter to use default)
-prompt-select-branch = Please select {$name}
+prompt-input = Enter {$name}
+prompt-text = Enter {$name} (Ctrl+J for newline)
+prompt-select = Select {$name}
+prompt-confirm = Confirm {$name}
+prompt-password = Enter {$name} (press Enter to use default)
+prompt-select-branch = Select {$name}
 manual-input = [*] Manual input
 polling-queue-item = Task is in queue, please wait...
 
@@ -26,7 +27,7 @@ bye = Bye!
 load-config-failed = Failed to load configuration
 fill-required-config = Please fill in the required configuration (url + (user & token) or cookie)
 jenkins-login-instruction = Log in to Jenkins, click on your avatar in the top right corner to get User ID and generate API Token, or provide a valid auth cookie
-select-jenkins = Please select Jenkins service
+select-jenkins = Select Jenkins service
 select-jenkins-failed = Failed to select Jenkins service
 get-home-dir-failed = Failed to get home directory
 config-file = Configuration file

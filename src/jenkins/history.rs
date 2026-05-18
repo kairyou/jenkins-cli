@@ -37,6 +37,25 @@ pub struct HistoryEntry {
 }
 
 impl History {
+    fn print_history_param_line(mark: &str, key: String, value: String, suffix: Option<String>) {
+        if value.contains('\n') {
+            println!("{}{}: |", mark, key);
+            for line in value.lines() {
+                println!("{}", line);
+            }
+            if value.ends_with('\n') {
+                println!();
+            }
+            if let Some(suffix) = suffix {
+                println!("{}", suffix);
+            }
+        } else if let Some(suffix) = suffix {
+            println!("{}{}: {} {}", mark, key, value, suffix);
+        } else {
+            println!("{}{}: {}", mark, key, value);
+        }
+    }
+
     /// Check if two history entries match
     #[doc(hidden)]
     fn matches_entry(entry: &HistoryEntry, info: &HistoryEntry) -> bool {
@@ -200,7 +219,7 @@ impl History {
             });
 
             println!(
-                "{}{}",
+                "{}{}:",
                 t!("last-build-params").bold(),
                 datetime_str.map_or("".to_string(), |dt| format!(" ({})", dt))
             );
@@ -243,19 +262,23 @@ impl History {
 
                 if missing_params.contains(key) {
                     // deleted parameter - whole line red
-                    println!("{} {}: {}", "-".red(), key.red().bold(), display_value.red());
+                    Self::print_history_param_line(
+                        &"-".red().to_string(),
+                        key.red().bold().to_string(),
+                        display_value.red().to_string(),
+                        None,
+                    );
                 } else if invalid_choices.contains(key) {
                     // invalid choice value - whole line yellow + add mark
-                    println!(
-                        "{} {}: {} {}",
-                        "!".yellow(),
-                        key.yellow().bold(),
-                        display_value.yellow(),
-                        "<invalid>".yellow().italic()
+                    Self::print_history_param_line(
+                        &"!".yellow().to_string(),
+                        key.yellow().bold().to_string(),
+                        display_value.yellow().to_string(),
+                        Some("<invalid>".yellow().italic().to_string()),
                     );
                 } else {
                     // unchanged parameter
-                    println!("  {}: {}", key.bold(), display_value);
+                    Self::print_history_param_line("", key.bold().to_string(), display_value, None);
                 }
             }
 

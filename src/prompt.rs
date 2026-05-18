@@ -1,6 +1,6 @@
 /// Prompt helpers with Ctrl+C support.
 use std::error::Error;
-use std::io::ErrorKind;
+use std::io::{self, ErrorKind, Write};
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
 static PROMPTING: AtomicBool = AtomicBool::new(false);
@@ -132,6 +132,174 @@ pub fn request_prompt_back() {
             label
         ));
     }
+}
+
+#[derive(Clone)]
+struct ReedlineTextPrompt {
+    prompt_text: String,
+}
+
+impl reedline::Prompt for ReedlineTextPrompt {
+    fn render_prompt_left(&self) -> std::borrow::Cow<'_, str> {
+        std::borrow::Cow::Borrowed(&self.prompt_text)
+    }
+
+    fn render_prompt_right(&self) -> std::borrow::Cow<'_, str> {
+        std::borrow::Cow::Borrowed("")
+    }
+
+    fn render_prompt_indicator(&self, _prompt_mode: reedline::PromptEditMode) -> std::borrow::Cow<'_, str> {
+        std::borrow::Cow::Borrowed("")
+    }
+
+    fn render_prompt_multiline_indicator(&self) -> std::borrow::Cow<'_, str> {
+        std::borrow::Cow::Borrowed("")
+    }
+
+    fn render_prompt_history_search_indicator(
+        &self,
+        history_search: reedline::PromptHistorySearch,
+    ) -> std::borrow::Cow<'_, str> {
+        let prefix = match history_search.status {
+            reedline::PromptHistorySearchStatus::Passing => "",
+            reedline::PromptHistorySearchStatus::Failing => "failing ",
+        };
+        std::borrow::Cow::Owned(format!("({prefix}reverse-search: {}) ", history_search.term))
+    }
+}
+
+/// Read multi-line text while keeping Enter as submit.
+pub fn text_input(prompt_text: &str, default_value: &str) -> Option<String> {
+    use reedline::{
+        default_emacs_keybindings, EditCommand, Emacs, KeyCode, KeyModifiers, Reedline, ReedlineEvent, Signal,
+    };
+
+    with_prompt_kind(PromptKind::Input, || {
+        let mut keybindings = default_emacs_keybindings();
+        keybindings.add_binding(
+            KeyModifiers::CONTROL,
+            KeyCode::Char('j'),
+            ReedlineEvent::Edit(vec![EditCommand::InsertNewline]),
+        );
+        keybindings.remove_binding(KeyModifiers::SHIFT, KeyCode::Enter);
+
+        let mut editor = Reedline::create()
+            .with_edit_mode(Box::new(Emacs::new(keybindings)))
+            .use_bracketed_paste(true)
+            .use_kitty_keyboard_enhancement(false);
+
+        if !default_value.is_empty() {
+            editor.run_edit_commands(&[EditCommand::InsertString(default_value.to_string())]);
+        }
+
+        let prompt = ReedlineTextPrompt {
+            prompt_text: format!("{prompt_text}\n"),
+        };
+
+        match editor.read_line(&prompt) {
+            Ok(Signal::Success(value)) => Some(value),
+            Ok(Signal::CtrlC | Signal::CtrlD) => None,
+            Ok(Signal::ExternalBreak(_)) => None,
+            Ok(_) => None,
+            Err(_) => None,
+        }
+    })
+}
+
+pub fn string_input(prompt_text: &str, default_value: &str, trim: Option<bool>) -> Option<String> {
+    let user_value = handle_input(with_prompt_kind(PromptKind::Input, || {
+        dialoguer::Input::with_theme(&dialoguer::theme::ColorfulTheme::default())
+            .with_prompt(prompt_text)
+            .with_initial_text(default_value.to_string())
+            .allow_empty(true)
+            .interact_text()
+    }))?;
+
+    Some(if trim.unwrap_or(false) {
+        user_value.trim().to_string()
+    } else {
+        user_value
+    })
+}
+
+pub fn password_input(prompt_text: &str, default_value: &str) -> Option<String> {
+    with_prompt(|| {
+        use console::measure_text_width;
+        use crossterm::event::{self, Event, KeyCode, KeyModifiers};
+        use crossterm::terminal;
+
+        print!("{}", prompt_text);
+        let _ = io::stdout().flush();
+
+        if let Ok((cols, _)) = terminal::size() {
+            if measure_text_width(prompt_text) + 1 >= cols as usize {
+                println!();
+            } else {
+                print!(" ");
+            }
+        } else {
+            print!(" ");
+        }
+        let _ = io::stdout().flush();
+
+        let mut raw_active = terminal::enable_raw_mode().is_ok();
+        let mut input = String::new();
+        loop {
+            match event::read() {
+                Ok(Event::Key(key)) => match key.code {
+                    KeyCode::Enter => {
+                        if raw_active {
+                            let _ = terminal::disable_raw_mode();
+                        }
+                        print!("\r\n");
+                        let _ = io::stdout().flush();
+                        raw_active = false;
+                        break;
+                    }
+                    KeyCode::Backspace => {
+                        if !input.is_empty() {
+                            input.pop();
+                            print!("\x08 \x08");
+                            let _ = io::stdout().flush();
+                        }
+                    }
+                    KeyCode::Char('\u{3}') | KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        if raw_active {
+                            let _ = terminal::disable_raw_mode();
+                        }
+                        print!("\r\n");
+                        let _ = io::stdout().flush();
+                        return None;
+                    }
+                    KeyCode::Char(ch) => {
+                        input.push(ch);
+                        print!("*");
+                        let _ = io::stdout().flush();
+                    }
+                    _ => {}
+                },
+                Ok(_) => {}
+                Err(_) => {
+                    if raw_active {
+                        let _ = terminal::disable_raw_mode();
+                    }
+                    print!("\r\n");
+                    let _ = io::stdout().flush();
+                    return None;
+                }
+            }
+        }
+
+        if raw_active {
+            let _ = terminal::disable_raw_mode();
+        }
+
+        if input.is_empty() {
+            Some(default_value.to_string())
+        } else {
+            Some(input)
+        }
+    })
 }
 
 #[cfg(windows)]

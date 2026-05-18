@@ -721,115 +721,9 @@ impl JenkinsClient {
         parameter_definitions: Vec<JenkinsJobParameter>,
     ) -> Option<HashMap<String, ParamInfo>> {
         use dialoguer::theme::ColorfulTheme; // ColorfulTheme/SimpleTheme
-        use std::io::{self, Write};
         let mut parameters = HashMap::new();
         let branches = get_git_branches();
         let branch_names = ["GIT_BRANCH", "gitBranch"];
-
-        // for string, text, password
-        fn prompt_user_input(
-            fmt_name: &str,
-            fmt_desc: &str,
-            default_value: &str,
-            trim: Option<bool>,
-        ) -> Option<String> {
-            let user_value = prompt::handle_input(prompt::with_prompt_kind(prompt::PromptKind::Input, || {
-                dialoguer::Input::with_theme(&ColorfulTheme::default())
-                    .with_prompt(format!("{}{}", t!("prompt-input", "name" => fmt_name), fmt_desc))
-                    .with_initial_text(default_value.to_string())
-                    .allow_empty(true)
-                    .interact_text()
-            }))?;
-
-            Some(if trim.unwrap_or(false) {
-                user_value.trim().to_string()
-            } else {
-                user_value
-            })
-        }
-
-        fn prompt_password_input(fmt_name: &str, fmt_desc: &str, default_value: &str) -> Option<String> {
-            prompt::with_prompt(|| {
-                use console::measure_text_width;
-                use crossterm::event::{self, Event, KeyCode, KeyModifiers};
-                use crossterm::terminal;
-
-                let prompt = format!("{}{}", t!("prompt-password", "name" => fmt_name), fmt_desc);
-                print!("{}", prompt);
-                let _ = io::stdout().flush();
-
-                if let Ok((cols, _)) = terminal::size() {
-                    if measure_text_width(&prompt) + 1 >= cols as usize {
-                        println!();
-                    } else {
-                        print!(" ");
-                    }
-                } else {
-                    print!(" ");
-                }
-                let _ = io::stdout().flush();
-
-                let mut raw_active = terminal::enable_raw_mode().is_ok();
-                let mut input = String::new();
-                loop {
-                    match event::read() {
-                        Ok(Event::Key(key)) => match key.code {
-                            KeyCode::Enter => {
-                                if raw_active {
-                                    let _ = terminal::disable_raw_mode();
-                                }
-                                print!("\r\n");
-                                let _ = io::stdout().flush();
-                                raw_active = false;
-                                break;
-                            }
-                            KeyCode::Backspace => {
-                                if !input.is_empty() {
-                                    input.pop();
-                                    print!("\x08 \x08");
-                                    let _ = io::stdout().flush();
-                                }
-                            }
-                            KeyCode::Char('\u{3}') | KeyCode::Char('c')
-                                if key.modifiers.contains(KeyModifiers::CONTROL) =>
-                            {
-                                if raw_active {
-                                    let _ = terminal::disable_raw_mode();
-                                }
-                                print!("\r\n");
-                                let _ = io::stdout().flush();
-                                return None;
-                            }
-                            KeyCode::Char(ch) => {
-                                input.push(ch);
-                                print!("*");
-                                let _ = io::stdout().flush();
-                            }
-                            _ => {}
-                        },
-                        Ok(_) => {}
-                        Err(_) => {
-                            if raw_active {
-                                let _ = terminal::disable_raw_mode();
-                            }
-                            print!("\r\n");
-                            let _ = io::stdout().flush();
-                            return None;
-                        }
-                    }
-                }
-
-                if raw_active {
-                    let _ = terminal::disable_raw_mode();
-                }
-
-                if input.is_empty() {
-                    Some(default_value.to_string())
-                } else {
-                    Some(input)
-                }
-            })
-        }
 
         for param in parameter_definitions {
             let JenkinsJobParameter {
@@ -880,9 +774,16 @@ impl JenkinsClient {
                     None => return None, // Ctrl+C pressed - go back
                 }
             } else if param_type == Some(ParamType::Password) {
-                match prompt_password_input(&fmt_name, &fmt_desc, &default_value) {
+                let prompt_text = format!("{}{}", t!("prompt-password", "name" => fmt_name), fmt_desc);
+                match prompt::password_input(&prompt_text, &default_value) {
                     Some(pwd) if pwd.is_empty() => (default_value.to_string(), ParamType::Password),
                     Some(pwd) => (pwd, ParamType::Password),
+                    None => return None, // Ctrl+C pressed - go back
+                }
+            } else if param_type == Some(ParamType::Text) {
+                let prompt_text = format!("{}{}", t!("prompt-text", "name" => fmt_name), fmt_desc);
+                match prompt::text_input(&prompt_text, &default_value) {
+                    Some(v) => (v, ParamType::Text),
                     None => return None, // Ctrl+C pressed - go back
                 }
             } else if !branches.is_empty()
@@ -927,7 +828,8 @@ impl JenkinsClient {
 
                 match selected_idx {
                     Some(idx) if branch_options[idx] == manual_input => {
-                        match prompt_user_input(&fmt_name, &fmt_desc, "", trim) {
+                        let prompt_text = format!("{}{}", t!("prompt-input", "name" => fmt_name), fmt_desc);
+                        match prompt::string_input(&prompt_text, "", trim) {
                             Some(v) => (v, ParamType::String),
                             None => return None, // Ctrl+C in manual input
                         }
@@ -937,7 +839,8 @@ impl JenkinsClient {
                 }
             } else {
                 // For other types, use text input
-                match prompt_user_input(&fmt_name, &fmt_desc, &default_value, trim) {
+                let prompt_text = format!("{}{}", t!("prompt-input", "name" => fmt_name), fmt_desc);
+                match prompt::string_input(&prompt_text, &default_value, trim) {
                     Some(v) => (v, param_type.unwrap_or(ParamType::String)),
                     None => return None, // Ctrl+C pressed
                 }
