@@ -45,3 +45,17 @@ fn build_branch_options_prioritizes_default_then_current() {
         ]
     );
 }
+
+#[test]
+fn default_choice_selection_uses_matching_default_value() {
+    let choices = vec!["sit".to_string(), "uat".to_string(), "prod".to_string()];
+
+    assert_eq!(JenkinsClient::default_choice_selection(&choices, "uat"), 1);
+}
+
+#[test]
+fn default_choice_selection_falls_back_to_first_choice() {
+    let choices = vec!["sit".to_string(), "uat".to_string(), "prod".to_string()];
+
+    assert_eq!(JenkinsClient::default_choice_selection(&choices, "dev"), 0);
+}

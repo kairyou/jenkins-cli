@@ -36,8 +36,12 @@ parse-config-file-failed = 解析配置文件失败
 write-default-config-failed = 无法写入默认配置文件
 
 last-build-params = 上次的构建参数
-use-last-build-params = 是否直接使用上次的构建参数发布?
-use-modified-last-build-params = 参数配置已变更, 仍使用上次的构建参数?
+history-action-prompt = 请选择
+history-action-input = 请输入 y/e/r
+history-action-invalid = 输入无效, 请输入 y/e/r
+history-action-use-last = y  使用上次参数发布
+history-action-edit-last = e  修改上次参数后发布
+history-action-refill = r  重新填写参数
 params-changed-warning = 构建参数配置已变更
 update-history-failed = 更新历史记录失败: {$error}
 trigger-build-failed = 触发构建失败

@@ -36,6 +36,13 @@ pub struct HistoryEntry {
     pub completed_at: Option<i64>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HistoryParameterAction {
+    UseLast,
+    EditLast,
+    Refill,
+}
+
 impl History {
     fn print_history_param_line(mark: &str, key: String, value: String, suffix: Option<String>) {
         if value.contains('\n') {
@@ -193,14 +200,14 @@ impl History {
         }
     }
 
-    /// Display parameter differences and ask user to confirm usage of previous parameters.
-    /// Returns `Some(true)` if user wants to use previous params, `Some(false)` if not,
+    /// Display parameter differences and ask user how to handle previous parameters.
+    /// Returns `Some(action)` if user made a selection,
     /// or `None` if user pressed Ctrl+C to go back.
-    pub async fn should_use_history_parameters(
+    pub async fn select_history_parameter_action(
         &self,
         history_item: &Option<HistoryEntry>,
         current_parameters: &[JenkinsJobParameter],
-    ) -> Option<bool> {
+    ) -> Option<HistoryParameterAction> {
         let current_param_names: HashSet<String> = current_parameters.iter().map(|param| param.name.clone()).collect();
 
         // create current parameter choices map, for checking if the choice value is still valid
@@ -209,99 +216,128 @@ impl History {
             .map(|param| (param.name.clone(), param.choices.clone()))
             .collect();
 
-        history_item.as_ref().map_or(Some(false), |history| {
-            let params = history.params.as_ref().unwrap();
-            let datetime_str = history.created_at.map(|timestamp| {
-                let utc_datetime = DateTime::from_timestamp(timestamp, 0).unwrap();
-                // UTC => Local
-                let local_datetime = utc_datetime.with_timezone(&Local);
-                local_datetime.format("%Y-%m-%d %H:%M:%S").to_string()
-            });
+        history_item
+            .as_ref()
+            .map_or(Some(HistoryParameterAction::Refill), |history| {
+                let params = history.params.as_ref().unwrap();
+                let datetime_str = history.created_at.map(|timestamp| {
+                    let utc_datetime = DateTime::from_timestamp(timestamp, 0).unwrap();
+                    // UTC => Local
+                    let local_datetime = utc_datetime.with_timezone(&Local);
+                    local_datetime.format("%Y-%m-%d %H:%M:%S").to_string()
+                });
 
-            println!(
-                "{}{}:",
-                t!("last-build-params").bold(),
-                datetime_str.map_or("".to_string(), |dt| format!(" ({})", dt))
-            );
+                println!(
+                    "{}{}:",
+                    t!("last-build-params").bold(),
+                    datetime_str.map_or("".to_string(), |dt| format!(" ({})", dt))
+                );
 
-            // check if history parameters are consistent with current Jenkins config
-            let history_param_names: HashSet<String> = params.keys().cloned().collect();
+                // check if history parameters are consistent with current Jenkins config
+                let history_param_names: HashSet<String> = params.keys().cloned().collect();
 
-            // find new and missing parameters
-            let new_params: Vec<String> = current_param_names.difference(&history_param_names).cloned().collect();
-            let missing_params: Vec<String> = history_param_names.difference(&current_param_names).cloned().collect();
+                // find new and missing parameters
+                let new_params: Vec<String> = current_param_names.difference(&history_param_names).cloned().collect();
+                let missing_params: Vec<String> =
+                    history_param_names.difference(&current_param_names).cloned().collect();
 
-            // check invalid choice values
-            let invalid_choices: Vec<String> = params
-                .iter()
-                .filter(|(_k, v)| v.r#type == ParamType::Choice)
-                .filter(|(k, v)| {
-                    if let Some(Some(choices)) = current_param_choices.get(k.as_str()) {
-                        !choices.contains(&v.value)
-                    } else {
-                        false
-                    }
-                })
-                .map(|(k, _)| k.clone())
-                .collect();
+                // check invalid choice values
+                let invalid_choices: Vec<String> = params
+                    .iter()
+                    .filter(|(_k, v)| v.r#type == ParamType::Choice)
+                    .filter(|(k, v)| {
+                        if let Some(Some(choices)) = current_param_choices.get(k.as_str()) {
+                            !choices.contains(&v.value)
+                        } else {
+                            false
+                        }
+                    })
+                    .map(|(k, _)| k.clone())
+                    .collect();
 
-            let has_param_changes = !new_params.is_empty() || !missing_params.is_empty() || !invalid_choices.is_empty();
+                let has_param_changes =
+                    !new_params.is_empty() || !missing_params.is_empty() || !invalid_choices.is_empty();
 
-            // display parameter changes info
-            if has_param_changes {
-                println!("{}", t!("params-changed-warning").yellow());
-            }
-
-            // display history parameter values
-            for (key, param_info) in params.iter() {
-                let display_value = if param_info.r#type == ParamType::Password {
-                    MASKED_PASSWORD.to_string()
-                } else {
-                    param_info.value.clone()
-                };
-
-                if missing_params.contains(key) {
-                    // deleted parameter - whole line red
-                    Self::print_history_param_line(
-                        &"-".red().to_string(),
-                        key.red().bold().to_string(),
-                        display_value.red().to_string(),
-                        None,
-                    );
-                } else if invalid_choices.contains(key) {
-                    // invalid choice value - whole line yellow + add mark
-                    Self::print_history_param_line(
-                        &"!".yellow().to_string(),
-                        key.yellow().bold().to_string(),
-                        display_value.yellow().to_string(),
-                        Some("<invalid>".yellow().italic().to_string()),
-                    );
-                } else {
-                    // unchanged parameter
-                    Self::print_history_param_line("", key.bold().to_string(), display_value, None);
+                // display parameter changes info
+                if has_param_changes {
+                    println!("{}", t!("params-changed-warning").yellow());
                 }
-            }
 
-            // add "+" prefix to new parameters - whole line green
-            for key in &new_params {
-                println!("{} {}: {}", "+".green(), key.green().bold(), "<new>".green().italic());
-            }
+                // display history parameter values
+                for (key, param_info) in params.iter() {
+                    let display_value = if param_info.r#type == ParamType::Password {
+                        MASKED_PASSWORD.to_string()
+                    } else {
+                        param_info.value.clone()
+                    };
 
-            // if there are parameter changes, clearly inform the user
-            let prompt = if has_param_changes {
-                t!("use-modified-last-build-params")
-            } else {
-                t!("use-last-build-params")
-            };
+                    if missing_params.contains(key) {
+                        // deleted parameter - whole line red
+                        Self::print_history_param_line(
+                            &"-".red().to_string(),
+                            key.red().bold().to_string(),
+                            display_value.red().to_string(),
+                            None,
+                        );
+                    } else if invalid_choices.contains(key) {
+                        // invalid choice value - whole line yellow + add mark
+                        Self::print_history_param_line(
+                            &"!".yellow().to_string(),
+                            key.yellow().bold().to_string(),
+                            display_value.yellow().to_string(),
+                            Some("<invalid>".yellow().italic().to_string()),
+                        );
+                    } else {
+                        // unchanged parameter
+                        Self::print_history_param_line("", key.bold().to_string(), display_value, None);
+                    }
+                }
 
-            prompt::handle_confirm_opt(prompt::with_prompt_kind(prompt::PromptKind::Confirm, || {
-                dialoguer::Confirm::with_theme(&dialoguer::theme::ColorfulTheme::default())
-                    .with_prompt(prompt)
-                    .default(!has_param_changes) // when there are changes, default to no, otherwise default to yes
-                    .wait_for_newline(false)
-                    .interact_opt()
-            }))
-        })
+                // add "+" prefix to new parameters - whole line green
+                for key in &new_params {
+                    println!("{} {}: {}", "+".green(), key.green().bold(), "<new>".green().italic());
+                }
+
+                let options = [
+                    t!("history-action-use-last"),
+                    t!("history-action-edit-last"),
+                    t!("history-action-refill"),
+                ];
+                let default_selection = if has_param_changes { 2 } else { 0 };
+
+                println!();
+                println!("{}:", t!("history-action-prompt"));
+                for option in options {
+                    println!("  {}", option);
+                }
+
+                loop {
+                    let input = prompt::handle_input(prompt::with_prompt_kind(prompt::PromptKind::Input, || {
+                        dialoguer::Input::with_theme(&dialoguer::theme::ColorfulTheme::default())
+                            .with_prompt(t!("history-action-input"))
+                            .allow_empty(true)
+                            .interact_text()
+                    }))?;
+
+                    let value = input.trim().to_lowercase();
+                    let value = if value.is_empty() {
+                        if default_selection == 0 {
+                            "y"
+                        } else {
+                            "r"
+                        }
+                    } else {
+                        value.as_str()
+                    };
+
+                    match value {
+                        "y" => break Some(HistoryParameterAction::UseLast),
+                        "e" => break Some(HistoryParameterAction::EditLast),
+                        "r" => break Some(HistoryParameterAction::Refill),
+                        _ => println!("{}", t!("history-action-invalid").yellow()),
+                    }
+                }
+            })
     }
 
     /// process history parameters and merge with latest config
@@ -348,6 +384,22 @@ impl History {
         }
 
         merged_params
+    }
+
+    /// Apply previous parameter values as defaults to the latest Jenkins parameter definitions.
+    pub fn apply_history_defaults(
+        history_item: &HistoryEntry,
+        mut current_parameters: Vec<JenkinsJobParameter>,
+    ) -> Vec<JenkinsJobParameter> {
+        let merged_params = Self::merge_parameters(history_item, &current_parameters);
+
+        for param in &mut current_parameters {
+            if let Some(param_info) = merged_params.get(&param.name) {
+                param.default_value = Some(param_info.value.clone());
+            }
+        }
+
+        current_parameters
     }
 
     /// Clean up history entries for projects that no longer exist in the provided list

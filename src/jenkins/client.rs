@@ -708,6 +708,11 @@ impl JenkinsClient {
             .collect()
     }
 
+    #[doc(hidden)]
+    pub fn default_choice_selection(choices: &[String], default_value: &str) -> usize {
+        choices.iter().position(|choice| choice == default_value).unwrap_or(0)
+    }
+
     /// Prompts the user to enter values for the given parameter definitions.
     ///
     /// # Arguments
@@ -744,13 +749,14 @@ impl JenkinsClient {
             //     format!(" [可选值: {}]", c.join(", ").bold().green())
             // });
             let (final_value, param_type) = if let Some(choices) = choices {
+                let default_selection = Self::default_choice_selection(&choices, &default_value);
                 // Use Select to display the Choice list
                 let selection =
                     prompt::handle_selection_opt(prompt::with_prompt_kind(prompt::PromptKind::FuzzySelect, || {
                         dialoguer::FuzzySelect::with_theme(&ColorfulTheme::default())
                             .with_prompt(format!("{}{}", t!("prompt-select", "name" => &fmt_name), fmt_desc))
                             .items(&choices)
-                            .default(0)
+                            .default(default_selection)
                             .interact_opt()
                     }));
 

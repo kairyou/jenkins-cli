@@ -36,8 +36,12 @@ parse-config-file-failed = Failed to parse configuration file
 write-default-config-failed = Failed to write default configuration file
 
 last-build-params = Last build parameters
-use-last-build-params = Do you want to use the last build parameters?
-use-modified-last-build-params = Parameters changed. Use previous parameters anyway?
+history-action-prompt = Select an action
+history-action-input = Enter y/e/r
+history-action-invalid = Invalid input. Enter y/e/r
+history-action-use-last = y  Build with last parameters
+history-action-edit-last = e  Edit then build
+history-action-refill = r  Re-enter parameters
 params-changed-warning = The build parameters have changed
 update-history-failed = Failed to update history: {$error}
 trigger-build-failed = Failed to trigger build

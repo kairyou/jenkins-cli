@@ -1,7 +1,9 @@
 use jenkins::constants::ParamType;
 use jenkins::jenkins::history::*;
+use jenkins::jenkins::{JenkinsJobParameter, ParamInfo};
 use jenkins::migrations::{migrate_history_yaml_to_toml, migrate_to_v1};
 use serde_json::Value as JsonValue;
+use std::collections::HashMap;
 use std::fs;
 use tempfile::tempdir;
 
@@ -112,6 +114,102 @@ fn test_update_field() {
 
     let updated = history.get_history(&entry, BASE_URL).unwrap();
     assert_eq!(updated.completed_at, Some(3000));
+}
+
+#[test]
+fn test_apply_history_defaults() {
+    let mut params = HashMap::new();
+    params.insert(
+        "VERSION".to_string(),
+        ParamInfo {
+            value: "1.8.4".to_string(),
+            r#type: ParamType::String,
+        },
+    );
+    params.insert(
+        "ENV".to_string(),
+        ParamInfo {
+            value: "old-prod".to_string(),
+            r#type: ParamType::Choice,
+        },
+    );
+    params.insert(
+        "DESC".to_string(),
+        ParamInfo {
+            value: "line1\nline2".to_string(),
+            r#type: ParamType::Text,
+        },
+    );
+    params.insert(
+        "SKIP_TEST".to_string(),
+        ParamInfo {
+            value: "true".to_string(),
+            r#type: ParamType::Boolean,
+        },
+    );
+    params.insert(
+        "TOKEN".to_string(),
+        ParamInfo {
+            value: "<DEFAULT>".to_string(),
+            r#type: ParamType::Password,
+        },
+    );
+
+    let history_entry = HistoryEntry {
+        job_url: format!("{}/job1", BASE_URL),
+        name: "Job1".to_string(),
+        params: Some(params),
+        ..Default::default()
+    };
+
+    let current_parameters = vec![
+        JenkinsJobParameter {
+            name: "VERSION".to_string(),
+            default_value: Some("1.8.3".to_string()),
+            param_type: Some(ParamType::String),
+            ..Default::default()
+        },
+        JenkinsJobParameter {
+            name: "ENV".to_string(),
+            default_value: Some("prod".to_string()),
+            choices: Some(vec!["test".to_string(), "prod".to_string()]),
+            param_type: Some(ParamType::Choice),
+            ..Default::default()
+        },
+        JenkinsJobParameter {
+            name: "GRAY_PERCENT".to_string(),
+            default_value: Some("10".to_string()),
+            param_type: Some(ParamType::String),
+            ..Default::default()
+        },
+        JenkinsJobParameter {
+            name: "DESC".to_string(),
+            default_value: Some("default desc".to_string()),
+            param_type: Some(ParamType::Text),
+            ..Default::default()
+        },
+        JenkinsJobParameter {
+            name: "SKIP_TEST".to_string(),
+            default_value: Some("false".to_string()),
+            param_type: Some(ParamType::Boolean),
+            ..Default::default()
+        },
+        JenkinsJobParameter {
+            name: "TOKEN".to_string(),
+            default_value: Some("<DEFAULT>".to_string()),
+            param_type: Some(ParamType::Password),
+            ..Default::default()
+        },
+    ];
+
+    let defaults = History::apply_history_defaults(&history_entry, current_parameters);
+
+    assert_eq!(defaults[0].default_value.as_deref(), Some("1.8.4"));
+    assert_eq!(defaults[1].default_value.as_deref(), Some("prod"));
+    assert_eq!(defaults[2].default_value.as_deref(), Some("10"));
+    assert_eq!(defaults[3].default_value.as_deref(), Some("line1\nline2"));
+    assert_eq!(defaults[4].default_value.as_deref(), Some("true"));
+    assert_eq!(defaults[5].default_value.as_deref(), Some("<DEFAULT>"));
 }
 
 #[test]

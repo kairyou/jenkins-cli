@@ -27,7 +27,7 @@ use crate::{
     interrupts::{handle_ctrl_c, spawn_ctrl_c_key_listener, CtrlCPhase, CTRL_C},
     jenkins::{
         client::JenkinsClient,
-        history::{History, HistoryEntry},
+        history::{History, HistoryEntry, HistoryParameterAction},
         ClientConfig, Event,
     },
     models::JenkinsConfig,
@@ -153,6 +153,16 @@ fn filter_projects(projects: Vec<jenkins::JenkinsJob>, config: &JenkinsConfig) -
         .collect()
 }
 
+fn handle_menu_back(steps: &mut StepTracker) -> Option<bool> {
+    match handle_back_and_route(steps, &t!("bye")) {
+        RouteAction::ReturnService => Some(true),
+        RouteAction::ContinueProject => {
+            clear_screen();
+            None
+        }
+    }
+}
+
 /// Main menu
 async fn menu(service_step_enabled: bool) -> bool {
     let config = CONFIG.lock().await;
@@ -223,13 +233,10 @@ async fn menu(service_step_enabled: bool) -> bool {
             Some(j) => j,
             None => {
                 // Ctrl+C pressed
-                match handle_back_and_route(&mut steps, &t!("bye")) {
-                    RouteAction::ReturnService => return true,
-                    RouteAction::ContinueProject => {
-                        clear_screen();
-                        continue;
-                    }
+                if let Some(return_service) = handle_menu_back(&mut steps) {
+                    return return_service;
                 }
+                continue;
             }
         };
         let relative_path = job.url.split("/job/").skip(1).collect::<Vec<&str>>().join("/job/");
@@ -259,44 +266,52 @@ async fn menu(service_step_enabled: bool) -> bool {
 
         // Use last build params
         steps.enter_params();
-        let use_previous_params = match history
-            .should_use_history_parameters(&history_item, &current_parameters)
+        let parameter_action = match history
+            .select_history_parameter_action(&history_item, &current_parameters)
             .await
         {
             Some(choice) => choice,
             None => {
                 // Ctrl+C pressed
-                match handle_back_and_route(&mut steps, &t!("bye")) {
-                    RouteAction::ReturnService => return true,
-                    RouteAction::ContinueProject => {
-                        clear_screen();
-                        continue;
-                    }
+                if let Some(return_service) = handle_menu_back(&mut steps) {
+                    return return_service;
                 }
+                continue;
             }
         };
 
         // Step 2: Select parameters
-        let user_params = if use_previous_params {
-            let mut client_guard = client.write().await;
-            client_guard.job_url = Some(job_url.to_string());
+        let user_params = match parameter_action {
+            HistoryParameterAction::UseLast => {
+                let mut client_guard = client.write().await;
+                client_guard.job_url = Some(job_url.to_string());
 
-            // merge history parameters with current parameters
-            History::merge_parameters(&history_item.unwrap(), &current_parameters)
-        } else {
-            match JenkinsClient::prompt_job_parameters(current_parameters).await {
-                Some(params) => params,
-                None => {
-                    // Ctrl+C pressed
-                    match handle_back_and_route(&mut steps, &t!("bye")) {
-                        RouteAction::ReturnService => return true,
-                        RouteAction::ContinueProject => {
-                            clear_screen();
-                            continue;
+                // merge history parameters with current parameters
+                History::merge_parameters(&history_item.unwrap(), &current_parameters)
+            }
+            HistoryParameterAction::EditLast => {
+                let parameter_definitions = History::apply_history_defaults(&history_item.unwrap(), current_parameters);
+                match JenkinsClient::prompt_job_parameters(parameter_definitions).await {
+                    Some(params) => params,
+                    None => {
+                        // Ctrl+C pressed
+                        if let Some(return_service) = handle_menu_back(&mut steps) {
+                            return return_service;
                         }
+                        continue;
                     }
                 }
             }
+            HistoryParameterAction::Refill => match JenkinsClient::prompt_job_parameters(current_parameters).await {
+                Some(params) => params,
+                None => {
+                    // Ctrl+C pressed
+                    if let Some(return_service) = handle_menu_back(&mut steps) {
+                        return return_service;
+                    }
+                    continue;
+                }
+            },
         };
 
         // All selections completed
