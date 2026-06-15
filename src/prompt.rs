@@ -496,7 +496,7 @@ mod tests {
 
     #[test]
     fn ignores_non_interrupted_error() {
-        let err = dialoguer::Error::IO(io::Error::new(io::ErrorKind::Other, "oops"));
+        let err = dialoguer::Error::IO(io::Error::other("oops"));
         assert!(!is_interrupted_error(&err));
     }
 }

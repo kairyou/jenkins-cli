@@ -18,12 +18,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Read Rust toolchain
+        id: rust-toolchain
+        run: echo "toolchain=$(grep '^channel =' rust-toolchain.toml | cut -d '"' -f 2)" >> "$GITHUB_OUTPUT"
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
+          toolchain: ${{ steps.rust-toolchain.outputs.toolchain }}
           components: clippy, rustfmt
       - name: Run clippy
-        run: cargo clippy -- -D warnings
+        run: cargo clippy --all-targets --all-features -- -D warnings
       - name: Check formatting
         run: cargo fmt -- --check
 
@@ -31,8 +34,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Read Rust toolchain
+        id: rust-toolchain
+        run: echo "toolchain=$(grep '^channel =' rust-toolchain.toml | cut -d '"' -f 2)" >> "$GITHUB_OUTPUT"
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
+          toolchain: ${{ steps.rust-toolchain.outputs.toolchain }}
       - name: Run tests
         run: cargo test -v --no-fail-fast
