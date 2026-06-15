@@ -37,6 +37,7 @@ pub struct HistoryEntry {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum HistoryParameterAction {
     UseLast,
     EditLast,
@@ -44,6 +45,7 @@ pub enum HistoryParameterAction {
 }
 
 impl History {
+    #[allow(dead_code)]
     fn print_history_param_line(mark: &str, key: String, value: String, suffix: Option<String>) {
         if value.contains('\n') {
             println!("{}{}: |", mark, key);
@@ -203,6 +205,7 @@ impl History {
     /// Display parameter differences and ask user how to handle previous parameters.
     /// Returns `Some(action)` if user made a selection,
     /// or `None` if user pressed Ctrl+C to go back.
+    #[allow(dead_code)]
     pub async fn select_history_parameter_action(
         &self,
         history_item: &Option<HistoryEntry>,

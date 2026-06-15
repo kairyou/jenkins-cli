@@ -11,6 +11,8 @@ pub mod cookie;
 pub use client::ClientConfig;
 #[doc(hidden)]
 pub mod history;
+#[doc(hidden)]
+pub mod presets;
 
 #[derive(Debug, Clone)]
 #[doc(hidden)]
@@ -20,7 +22,7 @@ pub enum Event {
     CancelPolling,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct ParamInfo {
     pub value: String,
     #[serde(default = "default_param_type")]

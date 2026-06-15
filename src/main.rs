@@ -2,6 +2,7 @@ use clap::{Arg, Command};
 use colored::*;
 use dialoguer::{theme::ColorfulTheme, FuzzySelect};
 use regex::Regex;
+use std::collections::HashMap;
 use tokio::sync::mpsc;
 
 mod config;
@@ -27,7 +28,8 @@ use crate::{
     interrupts::{handle_ctrl_c, spawn_ctrl_c_key_listener, CtrlCPhase, CTRL_C},
     jenkins::{
         client::JenkinsClient,
-        history::{History, HistoryEntry, HistoryParameterAction},
+        history::{History, HistoryEntry},
+        presets::{self, JobPresetIdentity, ParameterSource, PresetBuildAction, PresetStore},
         ClientConfig, Event,
     },
     models::JenkinsConfig,
@@ -73,6 +75,13 @@ async fn main() {
                 .help("Sets the Jenkins auth cookie (e.g. jwt_token=...)")
                 .required(false),
         )
+        .arg(
+            Arg::new("preset")
+                .long("preset")
+                .value_name("PRESET")
+                .help("Uses a saved parameter preset for the specified Jenkins job URL")
+                .required(false),
+        )
         .get_matches();
     check_unsupported_terminal();
 
@@ -101,8 +110,10 @@ async fn main() {
     });
 
     // main logic - loop to allow returning to service selection
+    let preset_arg = matches.get_one::<String>("preset").cloned();
+
     loop {
-        if menu(service_step_enabled).await {
+        if menu(service_step_enabled, preset_arg.as_deref()).await {
             clear_screen();
             if let Err(e) = config::select_jenkins_service().await {
                 eprintln!("Failed to select service: {}", e);
@@ -163,8 +174,152 @@ fn handle_menu_back(steps: &mut StepTracker) -> Option<bool> {
     }
 }
 
+async fn resolve_user_parameters(
+    presets: &mut PresetStore,
+    identity: &JobPresetIdentity,
+    source: ParameterSource,
+    history_item: Option<&HistoryEntry>,
+    current_parameters: Vec<jenkins::JenkinsJobParameter>,
+) -> Option<(HashMap<String, jenkins::ParamInfo>, Option<String>)> {
+    match source {
+        ParameterSource::Preset(preset) => {
+            let action = presets::select_preset_action(&preset).await?;
+            match action {
+                PresetBuildAction::Build => {
+                    let params = presets::merge_preset_parameters(&preset, &current_parameters);
+                    Some((params, Some(preset.name)))
+                }
+                PresetBuildAction::Edit => {
+                    let parameter_definitions = presets::apply_preset_defaults(&preset, current_parameters);
+                    let params = JenkinsClient::prompt_job_parameters(parameter_definitions).await?;
+                    Some((params, None))
+                }
+                PresetBuildAction::EditAndUpdate => {
+                    let parameter_definitions = presets::apply_preset_defaults(&preset, current_parameters);
+                    let params = JenkinsClient::prompt_job_parameters(parameter_definitions).await?;
+                    handle_preset_save_action(presets, identity, &preset.name, params, PresetBuildAction::Update)
+                }
+                PresetBuildAction::EditAndSaveAs => {
+                    let parameter_definitions = presets::apply_preset_defaults(&preset, current_parameters);
+                    let params = JenkinsClient::prompt_job_parameters(parameter_definitions).await?;
+                    handle_preset_save_action(presets, identity, &preset.name, params, PresetBuildAction::SaveAs)
+                }
+                PresetBuildAction::Refill => {
+                    let params = JenkinsClient::prompt_job_parameters(current_parameters).await?;
+                    let post_action = presets::select_after_edit_action(false).await?;
+                    handle_preset_save_action(presets, identity, "", params, post_action)
+                }
+                PresetBuildAction::Update => {
+                    let params = presets::merge_preset_parameters(&preset, &current_parameters);
+                    if let Err(e) = presets.upsert_preset(identity, &preset.name, params.clone()) {
+                        eprintln!("{}", t!("update-preset-failed", "error" => e.to_string()));
+                    } else {
+                        println!("{}", t!("parameter-preset-updated", "name" => preset.name.clone()));
+                    }
+                    Some((params, Some(preset.name)))
+                }
+                PresetBuildAction::SaveAs => {
+                    let params = presets::merge_preset_parameters(&preset, &current_parameters);
+                    handle_preset_save_action(presets, identity, &preset.name, params, PresetBuildAction::SaveAs)
+                }
+            }
+        }
+        ParameterSource::LastBuild => {
+            let history_item = history_item?;
+            let action = match history_item.params.as_ref() {
+                Some(params) => {
+                    println!("{}:", t!("last-build-params").bold());
+                    presets::print_params(params);
+                    presets::select_last_build_action().await?
+                }
+                None => PresetBuildAction::Edit,
+            };
+
+            match action {
+                PresetBuildAction::Build => Some((History::merge_parameters(history_item, &current_parameters), None)),
+                PresetBuildAction::Edit => {
+                    let parameter_definitions = History::apply_history_defaults(history_item, current_parameters);
+                    let params = JenkinsClient::prompt_job_parameters(parameter_definitions).await?;
+                    let post_action = presets::select_after_edit_action(false).await?;
+                    handle_preset_save_action(presets, identity, "", params, post_action)
+                }
+                PresetBuildAction::EditAndUpdate => {
+                    Some((History::merge_parameters(history_item, &current_parameters), None))
+                }
+                PresetBuildAction::EditAndSaveAs => {
+                    let parameter_definitions = History::apply_history_defaults(history_item, current_parameters);
+                    let params = JenkinsClient::prompt_job_parameters(parameter_definitions).await?;
+                    handle_preset_save_action(presets, identity, "", params, PresetBuildAction::SaveAs)
+                }
+                PresetBuildAction::SaveAs => {
+                    let params = History::merge_parameters(history_item, &current_parameters);
+                    handle_preset_save_action(presets, identity, "", params, PresetBuildAction::SaveAs)
+                }
+                PresetBuildAction::Refill => {
+                    let params = JenkinsClient::prompt_job_parameters(current_parameters).await?;
+                    let post_action = presets::select_after_edit_action(false).await?;
+                    handle_preset_save_action(presets, identity, "", params, post_action)
+                }
+                PresetBuildAction::Update => Some((History::merge_parameters(history_item, &current_parameters), None)),
+            }
+        }
+        ParameterSource::JenkinsDefault => {
+            let params = JenkinsClient::prompt_job_parameters(current_parameters).await?;
+            let post_action = presets::select_after_edit_action(false).await?;
+            handle_preset_save_action(presets, identity, "", params, post_action)
+        }
+        ParameterSource::ManagePresets => None,
+    }
+}
+
+fn handle_preset_save_action(
+    presets: &mut PresetStore,
+    identity: &JobPresetIdentity,
+    current_preset_name: &str,
+    params: HashMap<String, jenkins::ParamInfo>,
+    action: PresetBuildAction,
+) -> Option<(HashMap<String, jenkins::ParamInfo>, Option<String>)> {
+    match action {
+        PresetBuildAction::Build
+        | PresetBuildAction::Edit
+        | PresetBuildAction::EditAndUpdate
+        | PresetBuildAction::EditAndSaveAs
+        | PresetBuildAction::Refill => Some((params, None)),
+        PresetBuildAction::Update => {
+            if current_preset_name.is_empty() {
+                return Some((params, None));
+            }
+            if let Err(e) = presets.upsert_preset(identity, current_preset_name, params.clone()) {
+                eprintln!("{}", t!("update-preset-failed", "error" => e.to_string()));
+            } else {
+                println!(
+                    "{}",
+                    t!("parameter-preset-updated", "name" => current_preset_name.to_string())
+                );
+            }
+            Some((params, Some(current_preset_name.to_string())))
+        }
+        PresetBuildAction::SaveAs => {
+            let preset_name = presets::prompt_preset_name(None)?;
+            if presets.preset_exists(identity, &preset_name) {
+                println!(
+                    "{}",
+                    t!("parameter-preset-overwrite", "name" => preset_name.clone()).yellow()
+                );
+            }
+            if let Err(e) = presets.upsert_preset(identity, &preset_name, params.clone()) {
+                eprintln!("{}", t!("update-preset-failed", "error" => e.to_string()));
+                Some((params, None))
+            } else {
+                println!("{}", t!("parameter-preset-saved", "name" => preset_name.clone()));
+                Some((params, Some(preset_name)))
+            }
+        }
+    }
+}
+
 /// Main menu
-async fn menu(service_step_enabled: bool) -> bool {
+async fn menu(service_step_enabled: bool, preset_arg: Option<&str>) -> bool {
     let config = CONFIG.lock().await;
     // println!("runtime_config:\n{:?}\n{:?}", config.global, config.jenkins);
 
@@ -197,6 +352,10 @@ async fn menu(service_step_enabled: bool) -> bool {
     } else {
         jenkins_config.url.clone()
     };
+    if preset_arg.is_some() && !jenkins_config.url.contains("/job/") {
+        eprintln!("{}", t!("preset-requires-job-url"));
+        std::process::exit(1);
+    }
     // let mut client = JenkinsClient::new(&config.url, &auth);
     let (event_sender, mut event_receiver) = mpsc::channel::<Event>(100);
 
@@ -219,6 +378,7 @@ async fn menu(service_step_enabled: bool) -> bool {
     )));
     // println!("config.url: {}", config.url); // client.read().await.base_url
     let mut history = History::new().unwrap();
+    let mut presets = PresetStore::new().unwrap();
     let enable_history = jenkins_config.enable_history.unwrap_or(true);
 
     CTRL_C
@@ -226,10 +386,10 @@ async fn menu(service_step_enabled: bool) -> bool {
         .await;
 
     // Main selection loop - allows going back from param selection to project selection
-    let (job, job_url, user_params) = loop {
+    let (job, job_url, user_params, preset_identity, used_preset_name) = loop {
         // Step 1: Select project
         steps.enter_project();
-        let job = match get_project(&client, &jenkins_config, &mut history).await {
+        let job = match get_project(&client, &jenkins_config, &mut history, &mut presets).await {
             Some(j) => j,
             None => {
                 // Ctrl+C pressed
@@ -253,6 +413,12 @@ async fn menu(service_step_enabled: bool) -> bool {
             },
             &jenkins_config.url,
         );
+        let preset_identity = JobPresetIdentity {
+            service_url: base_url.clone(),
+            job_url: job_url.clone(),
+            job_name: job.name.clone(),
+            display_name: Some(job.display_name.clone()),
+        };
 
         // Get current Jenkins Job parameters
         let current_parameters = {
@@ -264,46 +430,19 @@ async fn menu(service_step_enabled: bool) -> bool {
                 .expect(&t!("get-job-parameters-failed"))
         };
 
-        // Use last build params
+        // Select parameter source and build parameters
         steps.enter_params();
-        let parameter_action = match history
-            .select_history_parameter_action(&history_item, &current_parameters)
-            .await
-        {
-            Some(choice) => choice,
-            None => {
-                // Ctrl+C pressed
-                if let Some(return_service) = handle_menu_back(&mut steps) {
-                    return return_service;
-                }
-                continue;
-            }
-        };
-
-        // Step 2: Select parameters
-        let user_params = match parameter_action {
-            HistoryParameterAction::UseLast => {
-                let mut client_guard = client.write().await;
-                client_guard.job_url = Some(job_url.to_string());
-
-                // merge history parameters with current parameters
-                History::merge_parameters(&history_item.unwrap(), &current_parameters)
-            }
-            HistoryParameterAction::EditLast => {
-                let parameter_definitions = History::apply_history_defaults(&history_item.unwrap(), current_parameters);
-                match JenkinsClient::prompt_job_parameters(parameter_definitions).await {
-                    Some(params) => params,
-                    None => {
-                        // Ctrl+C pressed
-                        if let Some(return_service) = handle_menu_back(&mut steps) {
-                            return return_service;
-                        }
-                        continue;
-                    }
+        let parameter_source = if let Some(preset_name) = preset_arg {
+            match presets.find_preset(&preset_identity, preset_name) {
+                Some(preset) => ParameterSource::Preset(preset),
+                None => {
+                    eprintln!("{}", t!("preset-not-found", "name" => preset_name.to_string()));
+                    std::process::exit(1);
                 }
             }
-            HistoryParameterAction::Refill => match JenkinsClient::prompt_job_parameters(current_parameters).await {
-                Some(params) => params,
+        } else {
+            match presets::select_parameter_source(&presets, &preset_identity, history_item.is_some()).await {
+                Some(source) => source,
                 None => {
                     // Ctrl+C pressed
                     if let Some(return_service) = handle_menu_back(&mut steps) {
@@ -311,11 +450,49 @@ async fn menu(service_step_enabled: bool) -> bool {
                     }
                     continue;
                 }
-            },
+            }
+        };
+
+        if matches!(parameter_source, ParameterSource::ManagePresets) {
+            if presets::manage_presets(&mut presets, &preset_identity).await.is_none() {
+                if let Some(return_service) = handle_menu_back(&mut steps) {
+                    return return_service;
+                }
+            }
+            continue;
+        }
+
+        let (user_params, used_preset_name) = if preset_arg.is_some() {
+            match parameter_source {
+                ParameterSource::Preset(preset) => (
+                    presets::merge_preset_parameters(&preset, &current_parameters),
+                    Some(preset.name),
+                ),
+                ParameterSource::ManagePresets => unreachable!("--preset always resolves to a preset source"),
+                _ => unreachable!("--preset always resolves to a preset source"),
+            }
+        } else {
+            match resolve_user_parameters(
+                &mut presets,
+                &preset_identity,
+                parameter_source,
+                history_item.as_ref(),
+                current_parameters,
+            )
+            .await
+            {
+                Some(result) => result,
+                None => {
+                    if let Some(return_service) = handle_menu_back(&mut steps) {
+                        return return_service;
+                    }
+                    continue;
+                }
+            }
         };
 
         // All selections completed
-        break (job, job_url, user_params);
+        break (job, job_url, user_params, preset_identity, used_preset_name);
     };
 
     // clear_screen();
@@ -336,6 +513,12 @@ async fn menu(service_step_enabled: bool) -> bool {
         };
         if let Err(e) = history.upsert_history(&mut history_param) {
             eprintln!("{}", t!("update-history-failed", "error" => e.to_string()));
+        }
+    }
+
+    if let Some(preset_name) = used_preset_name.as_deref() {
+        if let Err(e) = presets.mark_preset_used(&preset_identity, preset_name) {
+            eprintln!("{}", t!("update-preset-failed", "error" => e.to_string()));
         }
     }
 
@@ -421,6 +604,7 @@ async fn get_project(
     client: &std::sync::Arc<tokio::sync::RwLock<JenkinsClient>>,
     jenkins_config: &JenkinsConfig,
     history: &mut History,
+    presets: &mut PresetStore,
 ) -> Option<jenkins::JenkinsJob> {
     if jenkins_config.url.contains("/job/") {
         match client.read().await.get_project(&jenkins_config.url).await {
@@ -456,6 +640,20 @@ async fn get_project(
             }
             Err(e) => {
                 eprintln!("{}", t!("history-cleanup-error", "error" => e.to_string()));
+            }
+        }
+
+        match presets.cleanup_obsolete_projects(&project_names, &jenkins_config.url) {
+            Ok(removed) => {
+                if !removed.is_empty() {
+                    println!(
+                        "{}",
+                        t!("preset-cleanup", "count" => removed.len().to_string(), "names" => removed.join(", "))
+                    );
+                }
+            }
+            Err(e) => {
+                eprintln!("{}", t!("preset-cleanup-error", "error" => e.to_string()));
             }
         }
 

@@ -12,6 +12,7 @@
 - 支持常见 Jenkins 操作（如触发构建）
 - 高性能且跨平台支持（Mac、Windows、Linux）
 - 支持记住上次构建参数，便于下次快速构建
+- 支持参数预设，为同一个 Job 保存多组常用构建参数
 
 ### 演示
 
@@ -51,7 +52,7 @@ jenkins
 
 1. 提示选择一个 Jenkins 服务（如果配置了多个服务）
 2. 显示可用的项目列表
-3. 选择一个项目, 设置构建参数
+3. 选择一个项目，选择参数预设、上次构建参数或重新填写参数
 4. 触发构建并实时输出控制台日志
 
 Ctrl+C 行为说明：
@@ -70,6 +71,9 @@ jenkins -U http://jenkins.example.com:8081 -u username -t api_token
 
 # 使用 Jenkins Cookie（如 jwt_token） - 仅在 API token 不可用时使用
 jenkins -U http://jenkins.example.com:8081 --cookie "jwt_token=your-jwt"
+
+# 使用已保存的参数预设发布指定 Job
+jenkins -U http://jenkins.example.com:8081/job/My-Job/ --preset release-main
 ```
 
 可用的命令行选项：
@@ -77,6 +81,26 @@ jenkins -U http://jenkins.example.com:8081 --cookie "jwt_token=your-jwt"
 - `-u, --user <USER>`: Jenkins 用户名
 - `-t, --token <TOKEN>`: Jenkins API 令牌
 - `-c, --cookie <COOKIE>`: Jenkins 认证 Cookie（如 jwt_token=...）
+- `--preset <PRESET>`: 对指定 Jenkins Job URL 使用已保存的参数预设
+
+### 参数预设
+
+`history` 会继续自动保存每个 Job 最近一次实际构建参数。对于常用发布场景，可以在 CLI 中将当前参数显式保存为“参数预设”，下次进入同一个 Jenkins 服务和 Job 时直接选择使用。
+
+参数预设按 `Jenkins 服务 + Job` 隔离，不要求全局唯一。因此不同 Jenkins 服务或不同 Job 可以使用相同的预设名称，例如 `release-main`。
+
+快捷发布时，`--preset` 需要配合具体 Jenkins Job 地址使用：
+
+```bash
+jenkins -U http://jenkins.example.com:8081/job/My-Job/ --preset release-main
+```
+
+运行时数据保存在：
+
+```text
+~/.jenkins-cli/history.toml   # 自动记录最近一次构建参数
+~/.jenkins-cli/presets.toml   # 用户显式保存的参数预设
+```
 
 ## 配置
 
@@ -206,6 +230,7 @@ Jenkins User ID 就是登录 Jenkins 网页界面的用户名。
 - [x] 支持 password 类型参数
 - [x] 自动读取当前目录 git 分支
 - [x] 记录上次选择的项目/构建参数
+- [x] 保存 Job 参数预设
 - [x] i18n 支持 (fluent)
 - [x] 自动检查更新
 
