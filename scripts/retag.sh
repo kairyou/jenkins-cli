@@ -1,16 +1,33 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-# Get the latest Git tag
-latest_version=$(git describe --tags --abbrev=0 2>/dev/null)
+# Re-push a local tag to retrigger GitHub Actions tag workflows.
+# Usage:
+#   ./scripts/retag.sh          # re-push the latest reachable tag
+#   ./scripts/retag.sh v0.1.27  # re-push a specific tag
 
-# Exit if no tag is found
-if [ -z "$latest_version" ]; then
+tag_name="${1:-$(git describe --tags --abbrev=0 2>/dev/null || true)}"
+
+if [ -z "$tag_name" ]; then
     echo "Error: No Git tag found"
     exit 1
 fi
 
-echo "Latest tag: $latest_version"
-read -p "Do you want to recreate and push this tag? (y/n) " -n 1 -r
+if ! git rev-parse -q --verify "refs/tags/${tag_name}" >/dev/null; then
+    echo "Error: Local tag '${tag_name}' does not exist"
+    exit 1
+fi
+
+echo "Tag: ${tag_name}"
+echo
+echo "Local tag target:"
+git --no-pager show --no-patch --format="  %H %D%n  %s" "${tag_name}^{}"
+echo
+echo "Remote tag target:"
+git ls-remote --tags origin "${tag_name}*" || true
+echo
+echo "This will delete the remote tag and push the existing local tag again."
+read -r -p "Continue? (y/n) " -n 1
 echo
 if [[ ! $REPLY =~ ^[Yy]$ ]]
 then
@@ -18,16 +35,7 @@ then
     exit 1
 fi
 
-# Delete local tag
-git tag -d $latest_version
+git push origin ":refs/tags/${tag_name}" || true
+git push origin "refs/tags/${tag_name}:refs/tags/${tag_name}"
 
-# Delete remote tag
-git push origin :refs/tags/$latest_version
-
-# Create new local tag
-git tag $latest_version
-
-# Push new tag to remote
-git push origin $latest_version
-
-echo "Tag $latest_version has been recreated and pushed"
+echo "Tag ${tag_name} has been pushed again"
