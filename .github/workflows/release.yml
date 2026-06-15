@@ -29,8 +29,12 @@ jobs:
           - aarch64-unknown-linux-musl # ARM64 Linux (musl)
     steps:
       - uses: actions/checkout@v4
+      - name: Read Rust toolchain
+        id: rust-toolchain
+        run: echo "toolchain=$(grep '^channel =' rust-toolchain.toml | cut -d '"' -f 2)" >> "$GITHUB_OUTPUT"
       - uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: ${{ steps.rust-toolchain.outputs.toolchain }}
           targets: ${{ matrix.target }}
       - name: install cross
         run: cargo install cross --git https://github.com/cross-rs/cross
@@ -58,8 +62,13 @@ jobs:
           - x86_64-pc-windows-msvc # Windows (MSVC)
     steps:
       - uses: actions/checkout@v4
+      - name: Read Rust toolchain
+        id: rust-toolchain
+        shell: bash
+        run: echo "toolchain=$(grep '^channel =' rust-toolchain.toml | cut -d '"' -f 2)" >> "$GITHUB_OUTPUT"
       - uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: ${{ steps.rust-toolchain.outputs.toolchain }}
           targets: ${{ matrix.target }}
       - name: Build
         run: cargo build --release --target=${{ matrix.target }}
@@ -81,8 +90,12 @@ jobs:
           - aarch64-apple-darwin # M1/M2 Mac
     steps:
       - uses: actions/checkout@v4
+      - name: Read Rust toolchain
+        id: rust-toolchain
+        run: echo "toolchain=$(grep '^channel =' rust-toolchain.toml | cut -d '"' -f 2)" >> "$GITHUB_OUTPUT"
       - uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: ${{ steps.rust-toolchain.outputs.toolchain }}
           targets: ${{ matrix.target }}
       - name: Build
         run: cargo build --release --target=${{ matrix.target }}
