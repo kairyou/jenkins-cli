@@ -326,7 +326,7 @@ impl PresetStore {
 
 pub fn print_params(params: &HashMap<String, ParamInfo>) {
     let mut items: Vec<_> = params.iter().collect();
-    items.sort_by(|(left, _), (right, _)| left.cmp(right));
+    items.sort_by_key(|(key, _)| *key);
 
     for (key, param_info) in items {
         let display_value = if param_info.r#type == ParamType::Password {
