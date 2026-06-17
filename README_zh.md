@@ -74,7 +74,7 @@ jenkins -U http://jenkins.example.com:8081 -u username -t api_token
 jenkins -U http://jenkins.example.com:8081 --cookie "jwt_token=your-jwt"
 
 # 使用已保存的参数预设发布指定 Job
-jenkins -U http://jenkins.example.com:8081/job/My-Job/ --preset release-main
+jenkins -U http://jenkins.example.com:8081/job/My-Job/ --preset your-preset-name
 ```
 
 可用的命令行选项：
@@ -84,17 +84,7 @@ jenkins -U http://jenkins.example.com:8081/job/My-Job/ --preset release-main
 - `-c, --cookie <COOKIE>`: Jenkins 认证 Cookie（如 jwt_token=...）
 - `--preset <PRESET>`: 对指定 Jenkins Job URL 使用已保存的参数预设
 
-### 参数预设
-
-`history` 会继续自动保存每个 Job 最近一次实际构建参数。对于常用发布场景，可以在 CLI 中将当前参数显式保存为“参数预设”，下次进入同一个 Jenkins 服务和 Job 时直接选择使用。
-
-参数预设按 `Jenkins 服务 + Job` 隔离，不要求全局唯一。因此不同 Jenkins 服务或不同 Job 可以使用相同的预设名称，例如 `release-main`。
-
-快捷发布时，`--preset` 需要配合具体 Jenkins Job 地址使用：
-
-```bash
-jenkins -U http://jenkins.example.com:8081/job/My-Job/ --preset release-main
-```
+参数预设可在 CLI 中保存，用于常用构建参数组合。`history` 仍会自动记录每个 Job 最近一次实际构建参数。
 
 运行时数据保存在：
 
@@ -234,6 +224,7 @@ Jenkins User ID 就是登录 Jenkins 网页界面的用户名。
 - [x] 自动读取当前目录 git 分支
 - [x] 记录上次选择的项目/构建参数
 - [x] 保存 Job 参数预设
+- [x] 跟踪下游 Jenkins 构建
 - [x] i18n 支持 (fluent)
 - [x] 自动检查更新
 

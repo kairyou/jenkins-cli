@@ -74,7 +74,7 @@ jenkins -U http://jenkins.example.com:8081 -u username -t api_token
 jenkins -U http://jenkins.example.com:8081 --cookie "jwt_token=your-jwt"
 
 # Run a specific job with a saved parameter preset
-jenkins -U http://jenkins.example.com:8081/job/My-Job/ --preset release-main
+jenkins -U http://jenkins.example.com:8081/job/My-Job/ --preset your-preset-name
 ```
 
 Available command line options:
@@ -84,17 +84,7 @@ Available command line options:
 - `-c, --cookie <COOKIE>`: Jenkins auth cookie (e.g. jwt_token=...)
 - `--preset <PRESET>`: Use a saved parameter preset for the specified Jenkins job URL
 
-### Parameter Presets
-
-`history` still automatically records the most recent actual build parameters for each Job. For common release scenarios, you can explicitly save the current parameters as a parameter preset from the CLI, then select it the next time you open the same Jenkins service and Job.
-
-Parameter presets are scoped by `Jenkins service + Job`, so preset names do not need to be globally unique. Different Jenkins services or different Jobs can all have a preset named `release-main`.
-
-For shortcut builds, use `--preset` together with a Jenkins job URL:
-
-```bash
-jenkins -U http://jenkins.example.com:8081/job/My-Job/ --preset release-main
-```
+Parameter presets can be saved from the CLI for common build parameter sets. `history` still automatically records the most recent actual build parameters for each Job.
 
 Runtime data is stored in:
 
@@ -234,6 +224,7 @@ Note: Keep your API token secure. Do not share it or commit it to version contro
 - [x] Auto-detect current directory's git branch
 - [x] Remember last selected project and build parameters
 - [x] Save Job parameter presets
+- [x] Follow downstream Jenkins builds
 - [x] i18n support (fluent)
 - [x] Automatically check for updates
 
