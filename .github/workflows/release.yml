@@ -142,6 +142,102 @@ jobs:
           merge-multiple: true
       - name: List artifacts
         run: find artifacts -type f
+      - name: Prepare release artifacts
+        run: |
+          set -euo pipefail
+
+          expected_targets=(
+            x86_64-unknown-linux-gnu
+            x86_64-unknown-linux-musl
+            x86_64-pc-windows-gnu
+            aarch64-unknown-linux-gnu
+            aarch64-unknown-linux-musl
+            x86_64-pc-windows-msvc
+            x86_64-apple-darwin
+            aarch64-apple-darwin
+          )
+
+          actual_count="$(find artifacts -maxdepth 1 -type f -name 'jenkins-*.tar.gz' | wc -l | tr -d ' ')"
+          expected_count="${#expected_targets[@]}"
+          if [ "${actual_count}" -ne "${expected_count}" ]; then
+            echo "Expected ${expected_count} release archives, found ${actual_count}" >&2
+            find artifacts -maxdepth 1 -type f -name 'jenkins-*.tar.gz' -print >&2
+            exit 1
+          fi
+
+          artifacts_json="[]"
+          : > artifacts/checksums.txt
+
+          for target in "${expected_targets[@]}"; do
+            archive="jenkins-${target}.tar.gz"
+            path="artifacts/${archive}"
+            if [ ! -f "${path}" ]; then
+              echo "Missing release archive: ${archive}" >&2
+              exit 1
+            fi
+
+            sha256="$(sha256sum "${path}" | awk '{print $1}')"
+            printf '%s  %s\n' "${sha256}" "${archive}" >> artifacts/checksums.txt
+
+            os=""
+            arch=""
+            libc=""
+            case "${target}" in
+              x86_64-unknown-linux-gnu) os="linux"; arch="x86_64"; libc="gnu" ;;
+              x86_64-unknown-linux-musl) os="linux"; arch="x86_64"; libc="musl" ;;
+              aarch64-unknown-linux-gnu) os="linux"; arch="aarch64"; libc="gnu" ;;
+              aarch64-unknown-linux-musl) os="linux"; arch="aarch64"; libc="musl" ;;
+              x86_64-pc-windows-gnu) os="windows"; arch="x86_64"; libc="gnu" ;;
+              x86_64-pc-windows-msvc) os="windows"; arch="x86_64"; libc="msvc" ;;
+              x86_64-apple-darwin) os="macos"; arch="x86_64" ;;
+              aarch64-apple-darwin) os="macos"; arch="aarch64" ;;
+            esac
+
+            url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${archive}"
+            artifacts_json="$(jq -c \
+              --arg target "${target}" \
+              --arg os "${os}" \
+              --arg arch "${arch}" \
+              --arg libc "${libc}" \
+              --arg archive "${archive}" \
+              --arg sha256 "${sha256}" \
+              --arg url "${url}" \
+              '. + [{
+                target: $target,
+                os: $os,
+                arch: $arch,
+                libc: (if $libc == "" then null else $libc end),
+                archive: $archive,
+                sha256: $sha256,
+                url: $url
+              }]' <<< "${artifacts_json}")"
+          done
+
+          jq -n \
+            --arg name "jenkins-cli" \
+            --arg binary "jenkins" \
+            --arg version "${RELEASE_TAG#v}" \
+            --arg tag "${RELEASE_TAG}" \
+            --arg repository "https://github.com/${GITHUB_REPOSITORY}" \
+            --argjson artifacts "${artifacts_json}" \
+            '{
+              name: $name,
+              binary: $binary,
+              version: $version,
+              tag: $tag,
+              repository: $repository,
+              artifacts: $artifacts
+            }' > artifacts/dist-manifest.json
+
+          cat artifacts/checksums.txt
+          jq . artifacts/dist-manifest.json
+      - name: Upload release metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: jenkins-release-metadata
+          path: |
+            artifacts/checksums.txt
+            artifacts/dist-manifest.json
       - name: Delete existing release (if needed)
         run: |
           gh release delete "${RELEASE_TAG}" --yes || true
@@ -181,6 +277,8 @@ jobs:
         run: |
           mkdir -p artifacts
           gh release download --pattern "jenkins-*" --dir artifacts
+          gh release download --pattern "checksums.txt" --dir artifacts || true
+          gh release download --pattern "dist-manifest.json" --dir artifacts || true
       - name: Prepare EdgeOne directory
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
