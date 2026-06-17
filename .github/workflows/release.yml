@@ -259,12 +259,12 @@ jobs:
 
   deploy-edgeone:
     needs: create-release
-    if: ${{ always() && ((github.event_name == 'workflow_dispatch' && inputs.mode == 'edgeone_release') || needs.create-release.result == 'success') }}
+    if: ${{ always() && ((github.event_name == 'workflow_dispatch' && inputs.mode == 'edgeone_release') || (github.event_name != 'workflow_dispatch' && needs.create-release.result == 'success')) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Download artifacts (workflow)
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'prerelease' }}
+        if: ${{ github.event_name != 'workflow_dispatch' }}
         uses: actions/download-artifact@v4
         with:
           path: artifacts
