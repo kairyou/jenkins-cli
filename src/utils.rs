@@ -48,27 +48,23 @@ pub fn debug_line(message: &str) {
     if !debug_enabled() {
         return;
     }
-    use std::io::{self, Write};
-    let mut stderr = io::stderr();
-    let _ = write!(stderr, "\r\x1b[2K{}\r\n", message);
-    let _ = stderr.flush();
+    crate::terminal::reset_stderr_line();
+    eprintln!("{}", message);
 }
 
 /// Clear the current line on stdout and return cursor to column 0.
 pub fn reset_terminal_line() {
-    use std::io::{self, Write};
-    let mut stdout = io::stdout();
-    let _ = write!(stdout, "\r\x1b[2K");
-    let _ = stdout.flush();
-    let mut stderr = io::stderr();
-    let _ = write!(stderr, "\r\x1b[2K");
-    let _ = stderr.flush();
+    crate::terminal::reset_line();
+}
+
+/// Move to a clean new line for interactive prompts after streamed output.
+pub fn finish_terminal_line() {
+    crate::terminal::finish_line();
 }
 
 /// Ensure terminal is in a sane state before exiting.
 pub fn prepare_terminal_for_exit() {
-    let _ = crossterm::terminal::disable_raw_mode();
-    reset_terminal_line();
+    crate::terminal::restore();
 }
 
 /// get current unix timestamp

@@ -258,6 +258,7 @@ fn load_config() -> Result<JsonValue, Box<dyn std::error::Error>> {
 # enable_history = true
 # check_update = true
 # timeout = 30
+# follow_downstream = false
 
 [[jenkins]]
 name = ""

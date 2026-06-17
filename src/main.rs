@@ -16,6 +16,7 @@ mod migrations;
 mod models;
 mod prompt;
 mod spinner;
+mod terminal;
 mod update;
 mod utils;
 
@@ -360,10 +361,10 @@ async fn menu(service_step_enabled: bool, preset_arg: Option<&str>) -> bool {
     let (event_sender, mut event_receiver) = mpsc::channel::<Event>(100);
 
     // Create client configuration
-    let client_config = global_config
-        .as_ref()
-        .and_then(|g| g.timeout)
-        .map(|timeout| ClientConfig { timeout: Some(timeout) });
+    let client_config = global_config.as_ref().map(|g| ClientConfig {
+        timeout: g.timeout,
+        follow_downstream: g.follow_downstream.unwrap_or(false),
+    });
 
     let client = std::sync::Arc::new(tokio::sync::RwLock::new(JenkinsClient::new(
         &base_url,

@@ -21,6 +21,11 @@ cancel-build-failed = 终止构建失败
 check-build-status-failed = 无法检查构建状态
 cancel-build-error = 取消构建失败: {$error}
 build-already-completed = 构建已完成
+downstream-jobs-detected = 检测到下游 Job:
+downstream-build-not-found = 未找到下游 Job 的具体构建记录: {$name}
+downstream-build-lookup-failed = 查找下游构建失败 {$name}: {$error}
+downstream-build-title = 下游构建
+following-downstream-build = 正在跟踪 {$name}
 
 bye = Bye!
 

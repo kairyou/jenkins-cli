@@ -27,6 +27,7 @@ impl Spinner {
     }
 
     pub fn finish_with_message(self, msg: String) {
+        crate::terminal::reset_line();
         self.spinner.set_style(
             ProgressStyle::default_spinner()
                 .tick_strings(&[""])
@@ -78,6 +79,7 @@ pub fn clear_active_spinner() {
     if let Ok(mut guard) = ACTIVE_SPINNER.lock() {
         if let Some(spinner) = guard.take() {
             spinner.finish_and_clear();
+            crate::terminal::reset_line();
         }
     }
 }

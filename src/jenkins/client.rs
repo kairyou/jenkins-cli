@@ -4,6 +4,7 @@ use base64::Engine;
 use colored::*;
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 use tokio::sync::mpsc;
 
 use regex::Regex;
@@ -14,6 +15,7 @@ use reqwest::{
 use serde_json::Value as JsonValue;
 
 // use super::{JenkinsJob, JenkinsResponse, JenkinsJobConfig, JenkinsJobParameter};
+use super::console_html::{self, DownstreamJobLink};
 use crate::constants::{
     ParamType, DEFAULT_PARAM_VALUE, JENKINS_AUTO_BUILD_TYPES, JENKINS_BUILDABLE_TYPES, JENKINS_FOLDER_TYPE,
 };
@@ -22,15 +24,20 @@ use crate::prompt;
 use crate::{
     jenkins::{self, cookie::CookieStore, Event, JenkinsJob, JenkinsJobParameter, JenkinsResponse, ParamInfo},
     models::CookieRefreshConfig,
-    spinner,
-    utils::{clear_screen, delay, format_url, get_current_branch, get_git_branches},
+    spinner, terminal,
+    utils::{
+        clear_screen, delay, finish_terminal_line, format_url, get_current_branch, get_git_branches,
+        reset_terminal_line,
+    },
 };
 
 /// Configuration for the Jenkins client.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ClientConfig {
     /// HTTP request timeout in seconds (default: 30).
     pub timeout: Option<u64>,
+    /// Follow detected downstream builds.
+    pub follow_downstream: bool,
     // example:
     // pub max_retries: Option<u32>,
     // pub proxy: Option<String>,
@@ -43,6 +50,18 @@ pub struct BuildStatus {
     pub last_build: Option<u32>,
     pub last_completed: Option<u32>,
     pub in_queue: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct DownstreamBuild {
+    pub job: DownstreamJobLink,
+    pub build_url: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct BuildIdentity {
+    number: u64,
+    upstream_url: String,
 }
 
 #[doc(hidden)]
@@ -61,6 +80,7 @@ pub struct JenkinsClient {
     cookie_refresh: Option<CookieRefreshConfig>,
     cookie_refresh_attempted: AtomicBool,
     client: reqwest::Client,
+    follow_downstream: bool,
     // shared states
     pub job_url: Option<String>, // e.g. http://jenkins_url/job/job_name
 }
@@ -558,7 +578,9 @@ impl JenkinsClient {
             }
         });
         let cookie_store = CookieStore::new(cookie, persist_keys_hint);
-        let timeout_secs = config.and_then(|c| c.timeout).unwrap_or(30);
+        let config = config.unwrap_or_default();
+        let timeout_secs = config.timeout.unwrap_or(30);
+        let follow_downstream = config.follow_downstream;
 
         // println!("Authorization: {}", authorization);
         // std::env::set_var("NO_PROXY", "jenkins.example.com,other.example.com"); // Bypass proxy
@@ -577,6 +599,7 @@ impl JenkinsClient {
             cookie_refresh,
             cookie_refresh_attempted: AtomicBool::new(false),
             client,
+            follow_downstream,
             job_url: None,
         }
     }
@@ -978,10 +1001,39 @@ impl JenkinsClient {
         build_url: &str,
         event_receiver: &mut mpsc::Receiver<Event>,
     ) -> Result<(), anyhow::Error> {
+        let mut visited_builds = HashSet::new();
+        self.poll_build_status_inner(build_url, event_receiver, true, &mut visited_builds)
+            .await
+    }
+
+    async fn poll_build_status_inner(
+        &self,
+        build_url: &str,
+        event_receiver: &mut mpsc::Receiver<Event>,
+        allow_downstream: bool,
+        visited_builds: &mut HashSet<String>,
+    ) -> Result<(), anyhow::Error> {
+        let normalized_build_url = normalize_upstream_url(build_url);
+        if !visited_builds.insert(normalized_build_url) {
+            return Ok(());
+        }
+
         let api_url = format_url(&format!("{}/api/json", build_url));
         let mut spinner = Some(spinner::Spinner::new("".to_string()));
         let mut paused = false;
-        let mut last_log_length = 0; // Initialize the length of the last read log
+        let mut last_log_offset = 0; // Initialize the offset of the last read log
+        let mut recent_console_html = String::new();
+        let mut downstream_jobs = Vec::new();
+        let mut downstream_hrefs = HashSet::new();
+        let should_follow_downstream = allow_downstream && self.follow_downstream;
+        let upstream_info = if should_follow_downstream {
+            self.get_build_identity(build_url).await.ok()
+        } else {
+            None
+        };
+        let mut located_downstream_builds = Vec::new();
+        let mut located_downstream_hrefs = HashSet::new();
+        let mut next_downstream_lookup = tokio::time::Instant::now();
         loop {
             tokio::select! {
                 _ = delay((1000.0 * 0.2) as u64) => {
@@ -992,16 +1044,41 @@ impl JenkinsClient {
                     let build_info: serde_json::Value = response.json().await?;
 
                     // Retrieve and print the incremental part of Jenkins console log
-                    match self.get_jenkins_progressive_text(build_url, last_log_length).await {
-                        Ok((log, new_length)) => {
+                    match self.get_jenkins_progressive_html(build_url, last_log_offset).await {
+                        Ok((html, new_offset)) => {
+                            let log = console_html::render_console_html(&html);
+                            if should_follow_downstream {
+                                recent_console_html.push_str(&html);
+                                trim_recent_console_html(&mut recent_console_html);
+                                for link in console_html::extract_downstream_links(&recent_console_html) {
+                                    if downstream_hrefs.insert(link.key()) {
+                                        downstream_jobs.push(link);
+                                    }
+                                }
+                            }
                             if let Some(sp) = spinner.as_ref() {
                                 sp.suspend(|| {
-                                    print!("{}", log);
+                                    terminal::print_stream(&log);
                                 });
                             } else {
-                                print!("{}", log);
+                                terminal::print_stream(&log);
                             }
-                            last_log_length = new_length;
+                            last_log_offset = new_offset;
+
+                            if should_follow_downstream && tokio::time::Instant::now() >= next_downstream_lookup {
+                                if let Some(upstream) = upstream_info.as_ref() {
+                                    for job in &downstream_jobs {
+                                        if located_downstream_hrefs.contains(&job.key()) {
+                                            continue;
+                                        }
+                                        if let Ok(Some(build)) = self.locate_downstream_build(job, upstream).await {
+                                            located_downstream_hrefs.insert(job.key());
+                                            located_downstream_builds.push(build);
+                                        }
+                                    }
+                                }
+                                next_downstream_lookup = tokio::time::Instant::now() + Duration::from_secs(2);
+                            }
                         }
                         Err(e) => {
                             if let Some(sp) = spinner.as_ref() {
@@ -1018,7 +1095,8 @@ impl JenkinsClient {
                         delay((1000.0 * 0.5) as u64).await;
                     } else {
                         let result = build_info["result"].as_str().unwrap_or("UNKNOWN"); // or inProgress
-                        return if result == "SUCCESS" {
+                        finish_terminal_line();
+                        let build_result = if result == "SUCCESS" {
                             if let Some(sp) = spinner.take() {
                                 sp.finish_with_message(format!("Build result: {}", result.bold().green()));
                             } else {
@@ -1033,11 +1111,23 @@ impl JenkinsClient {
                             }
                             Err(anyhow!(result.red()))
                         };
+                        if should_follow_downstream {
+                            self.maybe_follow_downstream_builds(
+                                build_url,
+                                &downstream_jobs,
+                                located_downstream_builds,
+                                upstream_info,
+                                event_receiver,
+                                visited_builds,
+                            ).await?;
+                        }
+                        return build_result;
                     }
                 },
                 msg = event_receiver.recv() => {
                     match msg {
                         Some(Event::StopSpinner) => {
+                            reset_terminal_line();
                             if let Some(sp) = spinner.take() {
                                 sp.finish_with_message("".to_string());
                             }
@@ -1050,6 +1140,7 @@ impl JenkinsClient {
                             paused = false;
                         }
                         Some(Event::CancelPolling) | None => {
+                            reset_terminal_line();
                             if let Some(sp) = spinner.take() {
                                 sp.finish_with_message("".to_string());
                             }
@@ -1064,16 +1155,16 @@ impl JenkinsClient {
     }
 
     /// Retrieves the incremental part of the Jenkins build log
-    pub async fn get_jenkins_progressive_text(
+    pub async fn get_jenkins_progressive_html(
         &self,
         build_url: &str,
         start: usize,
     ) -> Result<(String, usize), anyhow::Error> {
-        let api_url = format_url(&format!("{}/logText/progressiveText?start={}", build_url, start));
+        let api_url = format_url(&format!("{}/logText/progressiveHtml?start={}", build_url, start));
         let response = self.get_with_refresh(&api_url).await?;
 
         // Get the new length from the 'X-Text-Size' header
-        let new_length = response
+        let new_offset = response
             .headers()
             .get("X-Text-Size")
             .and_then(|v| v.to_str().ok())
@@ -1082,7 +1173,173 @@ impl JenkinsClient {
 
         let console_log = response.text().await?;
 
-        Ok((console_log, new_length))
+        Ok((console_log, new_offset))
+    }
+
+    async fn maybe_follow_downstream_builds(
+        &self,
+        upstream_build_url: &str,
+        downstream_jobs: &[DownstreamJobLink],
+        prelocated_builds: Vec<DownstreamBuild>,
+        upstream_info: Option<BuildIdentity>,
+        event_receiver: &mut mpsc::Receiver<Event>,
+        visited_builds: &mut HashSet<String>,
+    ) -> Result<(), anyhow::Error> {
+        if downstream_jobs.is_empty() {
+            return Ok(());
+        }
+
+        reset_terminal_line();
+        terminal::print_line(t!("downstream-jobs-detected").bold());
+        for job in downstream_jobs {
+            terminal::print_line(format!("  - {}", job.label.cyan()));
+        }
+
+        finish_terminal_line();
+        let upstream_info = match upstream_info {
+            Some(upstream) => upstream,
+            None => self.get_build_identity(upstream_build_url).await?,
+        };
+        let mut located = prelocated_builds;
+        let mut located_hrefs = located.iter().map(|build| build.job.key()).collect::<HashSet<String>>();
+        for job in downstream_jobs {
+            if located_hrefs.contains(&job.key()) {
+                continue;
+            }
+            match self.locate_downstream_build_with_retry(job, &upstream_info).await {
+                Ok(Some(build)) => {
+                    located_hrefs.insert(job.key());
+                    located.push(build);
+                }
+                Ok(None) => {
+                    terminal::print_line(t!("downstream-build-not-found", "name" => job.label.clone()).yellow())
+                }
+                Err(e) => terminal::print_line(
+                    t!("downstream-build-lookup-failed", "name" => job.label.clone(), "error" => e.to_string())
+                        .yellow(),
+                ),
+            }
+        }
+
+        let mut first_error = None;
+        for build in located {
+            finish_terminal_line();
+            terminal::print_line(terminal::separator(&t!("downstream-build-title")).dimmed());
+            terminal::print_line(format!(
+                "{} {}",
+                t!("following-downstream-build", "name" => build.job.label.clone()),
+                build.build_url.underline().blue()
+            ));
+            if let Err(e) =
+                Box::pin(self.poll_build_status_inner(&build.build_url, event_receiver, true, visited_builds)).await
+            {
+                if first_error.is_none() {
+                    first_error = Some(e);
+                }
+            }
+        }
+
+        if let Some(e) = first_error {
+            return Err(e);
+        }
+
+        Ok(())
+    }
+
+    async fn get_build_identity(&self, build_url: &str) -> Result<BuildIdentity, anyhow::Error> {
+        let api_url = format_url(&format!("{}/api/json?tree=number,url", build_url));
+        let response = self.get_with_refresh(&api_url).await?;
+        let build_info: serde_json::Value = response.json().await?;
+        let number = build_info["number"]
+            .as_u64()
+            .ok_or_else(|| anyhow!("missing upstream build number"))?;
+        let url = build_info["url"].as_str().unwrap_or(build_url).to_string();
+        let build_relative_url = self
+            .relative_jenkins_url(&url)
+            .unwrap_or_else(|| relative_path_from_url(&url));
+        let upstream_url = build_relative_url_to_job_url(&build_relative_url, number);
+
+        Ok(BuildIdentity {
+            number,
+            upstream_url: normalize_upstream_url(&upstream_url),
+        })
+    }
+
+    async fn locate_downstream_build(
+        &self,
+        job: &DownstreamJobLink,
+        upstream: &BuildIdentity,
+    ) -> Result<Option<DownstreamBuild>, anyhow::Error> {
+        let Some(job_url) = self.resolve_downstream_job_url(job).await? else {
+            return Ok(None);
+        };
+        let api_url = format_url(&format!(
+            "{}/api/json?tree=builds[number,url,building,result,actions[causes[*]]]{{0,20}}",
+            job_url
+        ));
+        let response = self.get_with_refresh(&api_url).await?;
+        let job_info: serde_json::Value = response.json().await?;
+        let Some(builds) = job_info["builds"].as_array() else {
+            return Ok(None);
+        };
+
+        for build in builds {
+            if build_matches_upstream(build, upstream) {
+                if let Some(url) = build["url"].as_str() {
+                    return Ok(Some(DownstreamBuild {
+                        job: job.clone(),
+                        build_url: url.to_string(),
+                    }));
+                }
+            }
+        }
+
+        Ok(None)
+    }
+
+    async fn resolve_downstream_job_url(&self, job: &DownstreamJobLink) -> Result<Option<String>, anyhow::Error> {
+        Ok(Some(self.absolute_jenkins_url(&job.href)))
+    }
+
+    async fn locate_downstream_build_with_retry(
+        &self,
+        job: &DownstreamJobLink,
+        upstream: &BuildIdentity,
+    ) -> Result<Option<DownstreamBuild>, anyhow::Error> {
+        let attempts = 15;
+        for attempt in 0..attempts {
+            if let Some(build) = self.locate_downstream_build(job, upstream).await? {
+                return Ok(Some(build));
+            }
+
+            if attempt + 1 < attempts {
+                delay(2000).await;
+            }
+        }
+
+        Ok(None)
+    }
+
+    fn absolute_jenkins_url(&self, href: &str) -> String {
+        if href.starts_with("http://") || href.starts_with("https://") {
+            format_url(href)
+        } else {
+            format_url(&format!(
+                "{}/{}",
+                self.base_url.trim_end_matches('/'),
+                href.trim_start_matches('/')
+            ))
+        }
+    }
+
+    fn relative_jenkins_url(&self, url: &str) -> Option<String> {
+        let base = reqwest::Url::parse(&self.base_url).ok()?;
+        let parsed = reqwest::Url::parse(url).ok()?;
+        if base.scheme() != parsed.scheme() || base.host_str() != parsed.host_str() || base.port() != parsed.port() {
+            return None;
+        }
+
+        Some(parsed.path().trim_start_matches('/').to_string())
     }
 
     /// Get Jenkins build log
@@ -1181,5 +1438,121 @@ impl JenkinsClient {
         let response = self.get_with_refresh(&api_url).await?;
         let project: JenkinsJob = response.json().await?;
         Ok(project)
+    }
+}
+
+fn normalize_upstream_url(url: &str) -> String {
+    url.trim_end_matches('/').to_string()
+}
+
+fn relative_path_from_url(url: &str) -> String {
+    reqwest::Url::parse(url)
+        .map(|parsed| parsed.path().trim_start_matches('/').to_string())
+        .unwrap_or_else(|_| url.trim_start_matches('/').to_string())
+}
+
+fn build_relative_url_to_job_url(build_relative_url: &str, build_number: u64) -> String {
+    let suffix = format!("/{build_number}");
+    let normalized = normalize_upstream_url(build_relative_url);
+    normalized
+        .strip_suffix(&suffix)
+        .unwrap_or(normalized.as_str())
+        .to_string()
+}
+
+fn build_matches_upstream(build: &serde_json::Value, upstream: &BuildIdentity) -> bool {
+    let Some(actions) = build["actions"].as_array() else {
+        return false;
+    };
+
+    for action in actions {
+        let Some(causes) = action["causes"].as_array() else {
+            continue;
+        };
+
+        for cause in causes {
+            let upstream_build = cause["upstreamBuild"].as_u64();
+            let upstream_url = cause["upstreamUrl"].as_str().map(normalize_upstream_url);
+
+            if upstream_build == Some(upstream.number)
+                && upstream_url.as_deref() == Some(upstream.upstream_url.as_str())
+            {
+                return true;
+            }
+        }
+    }
+
+    false
+}
+
+fn trim_recent_console_html(html: &mut String) {
+    const MAX_RECENT_HTML_BYTES: usize = 64 * 1024;
+    if html.len() <= MAX_RECENT_HTML_BYTES {
+        return;
+    }
+
+    let keep_from = html
+        .char_indices()
+        .map(|(idx, _)| idx)
+        .find(|idx| html.len() - idx <= MAX_RECENT_HTML_BYTES)
+        .unwrap_or(0);
+    html.drain(..keep_from);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{build_matches_upstream, BuildIdentity};
+    use serde_json::json;
+
+    #[test]
+    fn build_matches_upstream_by_number_and_url() {
+        let upstream = BuildIdentity {
+            number: 123,
+            upstream_url: "job/forder-test/job/main".to_string(),
+        };
+        let build = json!({
+            "actions": [
+                {
+                    "causes": [
+                        {
+                            "upstreamBuild": 123,
+                            "upstreamUrl": "job/forder-test/job/main/"
+                        }
+                    ]
+                }
+            ]
+        });
+
+        assert!(build_matches_upstream(&build, &upstream));
+    }
+
+    #[test]
+    fn build_does_not_match_different_upstream() {
+        let upstream = BuildIdentity {
+            number: 123,
+            upstream_url: "job/forder-test/job/main".to_string(),
+        };
+        let build = json!({
+            "actions": [
+                {
+                    "causes": [
+                        {
+                            "upstreamBuild": 456,
+                            "upstreamUrl": "job/forder-test/job/main/"
+                        }
+                    ]
+                }
+            ]
+        });
+
+        assert!(!build_matches_upstream(&build, &upstream));
+    }
+
+    #[test]
+    fn converts_build_relative_url_to_job_url() {
+        assert_eq!(
+            super::build_relative_url_to_job_url("job/forder-test/job/main/123/", 123),
+            "job/forder-test/job/main"
+        );
     }
 }

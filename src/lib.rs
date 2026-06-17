@@ -19,4 +19,6 @@ pub mod models;
 pub mod prompt;
 #[doc(hidden)]
 pub mod spinner;
+#[doc(hidden)]
+pub mod terminal;
 pub mod utils;

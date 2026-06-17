@@ -21,6 +21,11 @@ cancel-build-failed = Failed to cancel build
 check-build-status-failed = Failed to check build status
 cancel-build-error = Failed to cancel build: {$error}
 build-already-completed = Build already completed
+downstream-jobs-detected = Downstream jobs detected:
+downstream-build-not-found = Could not locate downstream build: {$name}
+downstream-build-lookup-failed = Failed to locate downstream build {$name}: {$error}
+downstream-build-title = Downstream build
+following-downstream-build = Following {$name}
 
 bye = Bye!
 

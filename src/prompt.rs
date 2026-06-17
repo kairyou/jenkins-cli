@@ -69,11 +69,8 @@ pub fn with_prompt_kind<F, R>(kind: PromptKind, f: F) -> R
 where
     F: FnOnce() -> R,
 {
-    use std::io::{self, Write};
-
     // Ensure prompts start at column 0 to avoid indentation drift.
-    eprint!("\r\x1b[2K");
-    let _ = io::stderr().flush();
+    crate::terminal::before_prompt();
 
     let _prompt_guard = PromptStateGuard::enter(kind);
     f()

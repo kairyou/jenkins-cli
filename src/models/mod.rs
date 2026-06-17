@@ -23,6 +23,8 @@ pub struct GlobalConfig {
     pub check_update: Option<bool>, // enable update check
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timeout: Option<u64>, // HTTP request timeout in seconds, default 30
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub follow_downstream: Option<bool>, // follow detected downstream builds
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
