@@ -264,7 +264,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Download artifacts (workflow)
-        if: ${{ github.event_name != 'workflow_dispatch' }}
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'prerelease' }}
         uses: actions/download-artifact@v4
         with:
           path: artifacts
