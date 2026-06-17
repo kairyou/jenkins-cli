@@ -13,6 +13,7 @@ Cross-platform CLI tool for triggering Jenkins builds. Written in Rust for high 
 - High performance and cross-platform compatibility (Mac, Windows, Linux)
 - Remembers last build parameters for quick re-runs
 - Supports parameter presets for saving multiple reusable parameter sets per Job
+- Optionally follows downstream builds triggered by the current build
 
 ### Demo
 
@@ -113,6 +114,7 @@ Create a file named `.jenkins.toml` in your home directory with the following co
 # enable_history = false # (optional), default true
 # check_update = false # (optional), default true
 # timeout = 30 # (optional), HTTP request timeout in seconds, default 30
+# follow_downstream = false # (optional), default false, follow downstream builds triggered by the current build
 
 [[jenkins]]
 name = "SIT"
@@ -138,6 +140,7 @@ token = "your-api-token"
   - `enable_history`: Remember last build parameters (optional), default true, set to false to disable
   - `check_update`: Automatically check for updates (optional), default true, set to false to disable
   - `timeout`: HTTP request timeout in seconds (optional), default 30
+  - `follow_downstream`: Follow downstream builds triggered by the current build (optional), default false
 - `jenkins`: Service configuration section (supports multiple services)
   - `name`: Service name (e.g., "SIT", "UAT", "PROD")
   - `url`: Jenkins server URL

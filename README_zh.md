@@ -13,6 +13,7 @@
 - 高性能且跨平台支持（Mac、Windows、Linux）
 - 支持记住上次构建参数，便于下次快速构建
 - 支持参数预设，为同一个 Job 保存多组常用构建参数
+- 可选跟踪当前构建触发的下游构建
 
 ### 演示
 
@@ -113,6 +114,7 @@ jenkins -U http://jenkins.example.com:8081/job/My-Job/ --preset release-main
 # enable_history = false # (可选), 默认 true
 # check_update = false # (可选), 默认 true
 # timeout = 30 # (可选), HTTP 请求超时时间(秒), 默认 30
+# follow_downstream = false # (可选), 默认 false, 跟踪当前构建触发的下游构建
 
 [[jenkins]]
 name = "SIT"
@@ -138,6 +140,7 @@ token = "your-api-token"
   - `enable_history`: 记录上次的构建参数 (可选), 默认 true, 设置为 false 以禁用
   - `check_update`: 自动检查更新 (可选), 默认 true, 设置为 false 以禁用
   - `timeout`: HTTP 请求超时时间(秒) (可选), 默认 30
+  - `follow_downstream`: 跟踪当前构建触发的下游构建 (可选), 默认 false
 - `jenkins`: 服务配置部分 (支持多服务)
   - `name`: Jenkins 服务名称 (例如 "SIT", "UAT", "PROD")
   - `url`: Jenkins 服务器地址
