@@ -207,7 +207,7 @@ async fn resolve_user_parameters(
                 }
                 PresetBuildAction::Refill => {
                     let params = JenkinsClient::prompt_job_parameters(current_parameters).await?;
-                    let post_action = presets::select_after_edit_action(false).await?;
+                    let post_action = presets::select_after_edit_action().await?;
                     handle_preset_save_action(presets, identity, "", params, post_action)
                 }
                 PresetBuildAction::Update => {
@@ -241,7 +241,7 @@ async fn resolve_user_parameters(
                 PresetBuildAction::Edit => {
                     let parameter_definitions = History::apply_history_defaults(history_item, current_parameters);
                     let params = JenkinsClient::prompt_job_parameters(parameter_definitions).await?;
-                    let post_action = presets::select_after_edit_action(false).await?;
+                    let post_action = presets::select_after_edit_action().await?;
                     handle_preset_save_action(presets, identity, "", params, post_action)
                 }
                 PresetBuildAction::EditAndUpdate => {
@@ -258,7 +258,7 @@ async fn resolve_user_parameters(
                 }
                 PresetBuildAction::Refill => {
                     let params = JenkinsClient::prompt_job_parameters(current_parameters).await?;
-                    let post_action = presets::select_after_edit_action(false).await?;
+                    let post_action = presets::select_after_edit_action().await?;
                     handle_preset_save_action(presets, identity, "", params, post_action)
                 }
                 PresetBuildAction::Update => Some((History::merge_parameters(history_item, &current_parameters), None)),
@@ -266,7 +266,7 @@ async fn resolve_user_parameters(
         }
         ParameterSource::JenkinsDefault => {
             let params = JenkinsClient::prompt_job_parameters(current_parameters).await?;
-            let post_action = presets::select_after_edit_action(false).await?;
+            let post_action = presets::select_after_edit_action().await?;
             handle_preset_save_action(presets, identity, "", params, post_action)
         }
         ParameterSource::ManagePresets => None,

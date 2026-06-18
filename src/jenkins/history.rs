@@ -302,43 +302,36 @@ impl History {
                 }
 
                 let options = [
-                    t!("history-action-use-last"),
-                    t!("history-action-edit-last"),
-                    t!("history-action-refill"),
+                    ("y", t!("history-action-use-last"), HistoryParameterAction::UseLast),
+                    ("e", t!("history-action-edit-last"), HistoryParameterAction::EditLast),
+                    ("r", t!("history-action-refill"), HistoryParameterAction::Refill),
                 ];
-                let default_selection = if has_param_changes { 2 } else { 0 };
+                let default_key = if has_param_changes { "r" } else { "y" };
+                let input_hint = options.iter().map(|(key, _, _)| *key).collect::<Vec<_>>().join("/");
 
                 println!();
-                println!("{}:", t!("history-action-prompt"));
-                for option in options {
-                    println!("  {}", option);
+                println!("{}:", t!("action-prompt"));
+                for (key, label, _) in &options {
+                    println!("  {}  {}", key, label);
                 }
 
                 loop {
                     let input = prompt::handle_input(prompt::with_prompt_kind(prompt::PromptKind::Input, || {
                         dialoguer::Input::with_theme(&dialoguer::theme::ColorfulTheme::default())
-                            .with_prompt(t!("history-action-input"))
+                            .with_prompt(
+                                t!("action-input", "keys" => input_hint.clone(), "default" => default_key.to_string()),
+                            )
                             .allow_empty(true)
                             .interact_text()
                     }))?;
 
                     let value = input.trim().to_lowercase();
-                    let value = if value.is_empty() {
-                        if default_selection == 0 {
-                            "y"
-                        } else {
-                            "r"
-                        }
-                    } else {
-                        value.as_str()
-                    };
+                    let value = if value.is_empty() { default_key } else { value.as_str() };
 
-                    match value {
-                        "y" => break Some(HistoryParameterAction::UseLast),
-                        "e" => break Some(HistoryParameterAction::EditLast),
-                        "r" => break Some(HistoryParameterAction::Refill),
-                        _ => println!("{}", t!("history-action-invalid").yellow()),
+                    if let Some((_, _, action)) = options.iter().find(|(key, _, _)| *key == value) {
+                        break Some(*action);
                     }
+                    println!("{}", t!("action-invalid", "keys" => input_hint.clone()).yellow());
                 }
             })
     }

@@ -403,30 +403,29 @@ pub async fn select_preset_action(preset: &ParameterPreset) -> Option<PresetBuil
     println!();
     print_params(&preset.params);
     prompt_preset_action(&[
-        (t!("preset-action-build"), PresetBuildAction::Build),
+        ("y", t!("action-build-now"), PresetBuildAction::Build),
         (
+            "u",
             t!("preset-action-edit-update-current"),
             PresetBuildAction::EditAndUpdate,
         ),
-        (t!("preset-action-edit-save-as"), PresetBuildAction::EditAndSaveAs),
+        ("s", t!("preset-action-edit-save-as"), PresetBuildAction::EditAndSaveAs),
     ])
 }
 
-pub async fn select_after_edit_action(source_is_preset: bool) -> Option<PresetBuildAction> {
-    let mut actions = vec![(t!("preset-action-build-once"), PresetBuildAction::Build)];
-    if source_is_preset {
-        actions.push((t!("preset-action-update-current"), PresetBuildAction::Update));
-    }
-    actions.push((t!("preset-action-save-as"), PresetBuildAction::SaveAs));
-    prompt_preset_action(&actions)
+pub async fn select_after_edit_action() -> Option<PresetBuildAction> {
+    prompt_preset_action(&[
+        ("y", t!("action-build-now"), PresetBuildAction::Build),
+        ("s", t!("preset-action-save-as"), PresetBuildAction::SaveAs),
+    ])
 }
 
 pub async fn select_last_build_action() -> Option<PresetBuildAction> {
     prompt_preset_action(&[
-        (t!("history-action-use-last"), PresetBuildAction::Build),
-        (t!("history-action-edit-last"), PresetBuildAction::Edit),
-        (t!("history-action-refill"), PresetBuildAction::Refill),
-        (t!("preset-action-save-as"), PresetBuildAction::SaveAs),
+        ("y", t!("history-action-use-last"), PresetBuildAction::Build),
+        ("e", t!("history-action-edit-last"), PresetBuildAction::Edit),
+        ("r", t!("history-action-refill"), PresetBuildAction::Refill),
+        ("s", t!("preset-action-save-as"), PresetBuildAction::SaveAs),
     ])
 }
 
@@ -564,48 +563,32 @@ pub fn merge_preset_parameters(
     crate::jenkins::history::History::merge_parameters(&history_entry, current_parameters)
 }
 
-fn prompt_preset_action(actions: &[(String, PresetBuildAction)]) -> Option<PresetBuildAction> {
+fn prompt_preset_action(actions: &[(&str, String, PresetBuildAction)]) -> Option<PresetBuildAction> {
     println!();
-    println!("{}:", t!("history-action-prompt"));
-    for (label, _) in actions {
-        println!("  {}", label);
+    println!("{}:", t!("action-prompt"));
+    for (key, label, _) in actions {
+        println!("  {}  {}", key, label);
     }
 
     loop {
         let input_hint = preset_action_input_hint(actions);
+        let default_key = "y";
         let input = prompt::handle_input(prompt::with_prompt_kind(prompt::PromptKind::Input, || {
             dialoguer::Input::with_theme(&ColorfulTheme::default())
-                .with_prompt(t!("preset-action-input", "keys" => input_hint.clone()))
+                .with_prompt(t!("action-input", "keys" => input_hint.clone(), "default" => default_key.to_string()))
                 .allow_empty(true)
                 .interact_text()
         }))?;
 
         let value = input.trim().to_lowercase();
         let value = if value.is_empty() { "y" } else { value.as_str() };
-        if let Some((_, action)) = actions
-            .iter()
-            .find(|(_, available)| preset_action_key(*available) == value)
-        {
+        if let Some((_, _, action)) = actions.iter().find(|(key, _, _)| *key == value) {
             return Some(*action);
         }
-        println!("{}", t!("preset-action-invalid", "keys" => input_hint).yellow());
+        println!("{}", t!("action-invalid", "keys" => input_hint).yellow());
     }
 }
 
-fn preset_action_input_hint(actions: &[(String, PresetBuildAction)]) -> String {
-    actions
-        .iter()
-        .map(|(_, action)| preset_action_key(*action))
-        .collect::<Vec<_>>()
-        .join("/")
-}
-
-fn preset_action_key(action: PresetBuildAction) -> &'static str {
-    match action {
-        PresetBuildAction::Build => "y",
-        PresetBuildAction::Edit => "e",
-        PresetBuildAction::EditAndUpdate | PresetBuildAction::Update => "u",
-        PresetBuildAction::EditAndSaveAs | PresetBuildAction::SaveAs => "s",
-        PresetBuildAction::Refill => "r",
-    }
+fn preset_action_input_hint(actions: &[(&str, String, PresetBuildAction)]) -> String {
+    actions.iter().map(|(key, _, _)| *key).collect::<Vec<_>>().join("/")
 }

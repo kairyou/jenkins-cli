@@ -1206,7 +1206,10 @@ impl JenkinsClient {
             if located_hrefs.contains(&job.key()) {
                 continue;
             }
-            match self.locate_downstream_build_with_retry(job, &upstream_info).await {
+            match self
+                .locate_downstream_build_with_retry(job, &upstream_info, event_receiver)
+                .await
+            {
                 Ok(Some(build)) => {
                     located_hrefs.insert(job.key());
                     located.push(build);
@@ -1305,6 +1308,7 @@ impl JenkinsClient {
         &self,
         job: &DownstreamJobLink,
         upstream: &BuildIdentity,
+        event_receiver: &mut mpsc::Receiver<Event>,
     ) -> Result<Option<DownstreamBuild>, anyhow::Error> {
         let attempts = 15;
         for attempt in 0..attempts {
@@ -1313,11 +1317,30 @@ impl JenkinsClient {
             }
 
             if attempt + 1 < attempts {
-                delay(2000).await;
+                self.wait_for_retry_or_cancel(event_receiver, 2000).await?;
             }
         }
 
         Ok(None)
+    }
+
+    async fn wait_for_retry_or_cancel(
+        &self,
+        event_receiver: &mut mpsc::Receiver<Event>,
+        delay_ms: u64,
+    ) -> Result<(), anyhow::Error> {
+        let sleep = tokio::time::sleep(Duration::from_millis(delay_ms));
+        tokio::pin!(sleep);
+
+        loop {
+            tokio::select! {
+                _ = &mut sleep => return Ok(()),
+                msg = event_receiver.recv() => match msg {
+                    Some(Event::CancelPolling) | None => return Err(anyhow!("cancelled!")),
+                    Some(Event::StopSpinner) | Some(Event::ResumeSpinner) => continue,
+                },
+            }
+        }
     }
 
     fn absolute_jenkins_url(&self, href: &str) -> String {
