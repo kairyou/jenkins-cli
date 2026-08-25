@@ -41,7 +41,9 @@ parse-config-file-failed = 解析配置文件失败
 write-default-config-failed = 无法写入默认配置文件
 
 action-prompt = 请选择
-action-input = 输入 {$keys} 后回车；直接回车 = {$default}
+action-input = 输入 {$keys} 后回车; 直接回车 = {$default}
+action-back = 返回
+action-cancel = 取消
 action-invalid = 输入无效, 请输入 {$keys}
 action-build-now = 立即发布
 
@@ -53,6 +55,7 @@ select-parameter-source = 请选择参数来源
 parameter-source-preset = 预设
 parameter-source-last-build = 上次构建参数
 parameter-source-reenter = 重新填写参数
+parameter-source-new-preset = 新建预设
 parameter-source-manage-presets = 管理预设
 parameter-preset = 参数预设
 parameter-preset-name = 参数预设名称
@@ -67,12 +70,18 @@ preset-not-found = 当前 Job 未找到参数预设: {$name}
 preset-action-edit-update-current = 修改并更新预设后发布
 preset-action-edit-save-as = 修改并另存预设后发布
 preset-action-save-as = 另存为新预设并发布
-manage-presets = 管理预设
+manage-presets = 预设管理
+preset-management = 预设管理 · 当前 Job
+preset-list-item = {$name} · {$status}
+preset-last-used = 最近使用: {$time}
+preset-never-used = 从未使用
+parameter-preset-exists = 参数预设已存在: {$name}
+manage-preset-edit = 查看 / 编辑参数
 manage-preset-delete = 删除预设
 manage-preset-rename = 重命名预设
-manage-preset-back = 返回
-select-preset-to-delete = 请选择要删除的预设
-select-preset-to-rename = 请选择要重命名的预设
+manage-preset-duplicate = 复制为新预设
+manage-preset-update = 更新当前预设
+manage-preset-save-as = 另存为新预设
 delete-preset-confirm = 删除预设 "{$name}"?
 no-parameter-presets = 暂无参数预设
 params-changed-warning = 构建参数配置已变更

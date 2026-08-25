@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use chrono::{DateTime, Local};
 use colored::Colorize;
 use dialoguer::{theme::ColorfulTheme, FuzzySelect};
 use serde::{Deserialize, Serialize};
@@ -78,8 +79,23 @@ pub enum PresetBuildAction {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PresetManageAction {
+    Edit,
     Delete,
     Rename,
+    Duplicate,
+    Back,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PresetEditSaveAction {
+    Update,
+    SaveAs,
+    Cancel,
+}
+
+enum PresetListSelection {
+    Preset(ParameterPreset),
+    Create,
     Back,
 }
 
@@ -360,11 +376,17 @@ pub async fn select_parameter_source(
     let presets = store.sorted_presets(identity);
 
     if presets.is_empty() {
-        return if has_history {
-            Some(ParameterSource::LastBuild)
-        } else {
-            Some(ParameterSource::JenkinsDefault)
-        };
+        let mut items = Vec::new();
+        let mut sources = Vec::new();
+        if has_history {
+            items.push(t!("parameter-source-last-build"));
+            sources.push(ParameterSource::LastBuild);
+        }
+        items.push(t!("parameter-source-reenter"));
+        sources.push(ParameterSource::JenkinsDefault);
+        items.push(t!("parameter-source-manage-presets"));
+        sources.push(ParameterSource::ManagePresets);
+        return select_parameter_source_item(items, sources);
     }
 
     let mut items = Vec::new();
@@ -385,16 +407,19 @@ pub async fn select_parameter_source(
     items.push(t!("parameter-source-manage-presets"));
     sources.push(ParameterSource::ManagePresets);
 
+    select_parameter_source_item(items, sources)
+}
+
+fn select_parameter_source_item(items: Vec<String>, sources: Vec<ParameterSource>) -> Option<ParameterSource> {
     let selection = prompt::handle_selection_opt(prompt::with_prompt_kind(prompt::PromptKind::FuzzySelectVim, || {
         FuzzySelect::with_theme(&ColorfulTheme::default())
             .with_prompt(t!("select-parameter-source"))
-            .items(&items)
+            .items(items)
             .default(0)
             .vim_mode(true)
             .with_initial_text("")
             .interact_opt()
     }));
-
     selection.map(|idx| sources[idx].clone())
 }
 
@@ -429,48 +454,129 @@ pub async fn select_last_build_action() -> Option<PresetBuildAction> {
     ])
 }
 
-pub async fn manage_presets(store: &mut PresetStore, identity: &JobPresetIdentity) -> Option<()> {
+pub async fn manage_presets(
+    store: &mut PresetStore,
+    identity: &JobPresetIdentity,
+    current_parameters: &[JenkinsJobParameter],
+) {
     loop {
-        let action = select_manage_action()?;
-        match action {
-            PresetManageAction::Delete => {
-                let preset = select_preset_for_management(store, identity, &t!("select-preset-to-delete"))?;
-                let confirmed =
-                    prompt::handle_confirm_opt(prompt::with_prompt_kind(prompt::PromptKind::Confirm, || {
-                        dialoguer::Confirm::with_theme(&ColorfulTheme::default())
-                            .with_prompt(t!("delete-preset-confirm", "name" => preset.name.clone()))
-                            .default(false)
-                            .show_default(true)
-                            .wait_for_newline(false)
-                            .interact_opt()
-                    }))?;
-                if confirmed {
-                    match store.delete_preset(identity, &preset.name) {
-                        Ok(true) => println!("{}", t!("parameter-preset-deleted", "name" => preset.name)),
+        let preset = match select_preset_for_management(store, identity) {
+            None => return,
+            Some(PresetListSelection::Preset(preset)) => preset,
+            Some(PresetListSelection::Create) => {
+                let _ = create_preset(store, identity, current_parameters).await;
+                continue;
+            }
+            Some(PresetListSelection::Back) => return,
+        };
+        while let Some(action) = select_preset_manage_action(&preset) {
+            match action {
+                PresetManageAction::Edit => {
+                    if edit_preset(store, identity, &preset, current_parameters)
+                        .await
+                        .is_none()
+                    {
+                        continue;
+                    }
+                    break;
+                }
+                PresetManageAction::Delete => {
+                    let Some(confirmed) =
+                        prompt::handle_confirm_opt(prompt::with_prompt_kind(prompt::PromptKind::Confirm, || {
+                            dialoguer::Confirm::with_theme(&ColorfulTheme::default())
+                                .with_prompt(t!("delete-preset-confirm", "name" => preset.name.clone()))
+                                .default(false)
+                                .show_default(true)
+                                .wait_for_newline(false)
+                                .interact_opt()
+                        }))
+                    else {
+                        continue;
+                    };
+                    if confirmed {
+                        match store.delete_preset(identity, &preset.name) {
+                            Ok(true) => println!("{}", t!("parameter-preset-deleted", "name" => preset.name)),
+                            Ok(false) => println!("{}", t!("preset-not-found", "name" => preset.name).yellow()),
+                            Err(e) => eprintln!("{}", t!("update-preset-failed", "error" => e.to_string())),
+                        }
+                    }
+                    break;
+                }
+                PresetManageAction::Rename => {
+                    let Some(new_name) = prompt_preset_name(Some(&preset.name)) else {
+                        continue;
+                    };
+                    match store.rename_preset(identity, &preset.name, &new_name) {
+                        Ok(true) => println!(
+                            "{}",
+                            t!("parameter-preset-renamed", "old" => preset.name, "new" => new_name)
+                        ),
                         Ok(false) => println!("{}", t!("preset-not-found", "name" => preset.name).yellow()),
                         Err(e) => eprintln!("{}", t!("update-preset-failed", "error" => e.to_string())),
                     }
+                    break;
                 }
-            }
-            PresetManageAction::Rename => {
-                let preset = select_preset_for_management(store, identity, &t!("select-preset-to-rename"))?;
-                let new_name = prompt_preset_name(Some(&preset.name))?;
-                match store.rename_preset(identity, &preset.name, &new_name) {
-                    Ok(true) => println!(
-                        "{}",
-                        t!("parameter-preset-renamed", "old" => preset.name, "new" => new_name)
-                    ),
-                    Ok(false) => println!("{}", t!("preset-not-found", "name" => preset.name).yellow()),
-                    Err(e) => eprintln!("{}", t!("update-preset-failed", "error" => e.to_string())),
+                PresetManageAction::Duplicate => {
+                    let Some(new_name) = prompt_unique_preset_name(store, identity) else {
+                        continue;
+                    };
+                    match store.upsert_preset(identity, &new_name, preset.params.clone()) {
+                        Ok(()) => println!("{}", t!("parameter-preset-saved", "name" => new_name)),
+                        Err(e) => eprintln!("{}", t!("update-preset-failed", "error" => e.to_string())),
+                    }
+                    break;
                 }
+                PresetManageAction::Back => break,
             }
-            PresetManageAction::Back => return Some(()),
         }
 
         if store.sorted_presets(identity).is_empty() {
-            return Some(());
+            return;
         }
     }
+}
+
+async fn create_preset(
+    store: &mut PresetStore,
+    identity: &JobPresetIdentity,
+    current_parameters: &[JenkinsJobParameter],
+) -> Option<()> {
+    let params = crate::jenkins::client::JenkinsClient::prompt_job_parameters(current_parameters.to_vec()).await?;
+    let name = prompt_unique_preset_name(store, identity)?;
+    match store.upsert_preset(identity, &name, params) {
+        Ok(()) => println!("{}", t!("parameter-preset-saved", "name" => name)),
+        Err(e) => eprintln!("{}", t!("update-preset-failed", "error" => e.to_string())),
+    }
+    Some(())
+}
+
+async fn edit_preset(
+    store: &mut PresetStore,
+    identity: &JobPresetIdentity,
+    preset: &ParameterPreset,
+    current_parameters: &[JenkinsJobParameter],
+) -> Option<()> {
+    println!("{}: {}", t!("parameter-preset").bold(), preset.name.bold().green());
+    println!();
+    print_params(&preset.params);
+    let definitions = apply_preset_defaults(preset, current_parameters.to_vec());
+    let params = crate::jenkins::client::JenkinsClient::prompt_job_parameters(definitions).await?;
+
+    match select_preset_edit_save_action()? {
+        PresetEditSaveAction::Update => match store.upsert_preset(identity, &preset.name, params) {
+            Ok(()) => println!("{}", t!("parameter-preset-updated", "name" => preset.name.clone())),
+            Err(e) => eprintln!("{}", t!("update-preset-failed", "error" => e.to_string())),
+        },
+        PresetEditSaveAction::SaveAs => {
+            let name = prompt_unique_preset_name(store, identity)?;
+            match store.upsert_preset(identity, &name, params) {
+                Ok(()) => println!("{}", t!("parameter-preset-saved", "name" => name)),
+                Err(e) => eprintln!("{}", t!("update-preset-failed", "error" => e.to_string())),
+            }
+        }
+        PresetEditSaveAction::Cancel => {}
+    }
+    Some(())
 }
 
 pub fn prompt_preset_name(existing_name: Option<&str>) -> Option<String> {
@@ -492,17 +598,22 @@ pub fn prompt_preset_name(existing_name: Option<&str>) -> Option<String> {
     }
 }
 
-fn select_manage_action() -> Option<PresetManageAction> {
+fn select_preset_manage_action(preset: &ParameterPreset) -> Option<PresetManageAction> {
     let items = vec![
-        t!("manage-preset-delete"),
+        t!("manage-preset-edit"),
         t!("manage-preset-rename"),
-        t!("manage-preset-back"),
+        t!("manage-preset-duplicate"),
+        t!("manage-preset-delete"),
+        t!("action-back"),
     ];
     let actions = [
-        PresetManageAction::Delete,
+        PresetManageAction::Edit,
         PresetManageAction::Rename,
+        PresetManageAction::Duplicate,
+        PresetManageAction::Delete,
         PresetManageAction::Back,
     ];
+    println!("{}: {}", t!("parameter-preset").bold(), preset.name.bold().green());
     let selection = prompt::handle_selection_opt(prompt::with_prompt_kind(prompt::PromptKind::FuzzySelectVim, || {
         FuzzySelect::with_theme(&ColorfulTheme::default())
             .with_prompt(t!("manage-presets"))
@@ -516,29 +627,93 @@ fn select_manage_action() -> Option<PresetManageAction> {
     selection.map(|idx| actions[idx])
 }
 
-fn select_preset_for_management(
-    store: &PresetStore,
-    identity: &JobPresetIdentity,
-    prompt_text: &str,
-) -> Option<ParameterPreset> {
-    let presets = store.sorted_presets(identity);
-    if presets.is_empty() {
-        println!("{}", t!("no-parameter-presets").yellow());
-        return None;
-    }
-
-    let items: Vec<String> = presets.iter().map(|preset| preset.name.clone()).collect();
+fn select_preset_edit_save_action() -> Option<PresetEditSaveAction> {
+    let items = vec![
+        t!("manage-preset-update"),
+        t!("manage-preset-save-as"),
+        t!("action-cancel"),
+    ];
+    let actions = [
+        PresetEditSaveAction::Update,
+        PresetEditSaveAction::SaveAs,
+        PresetEditSaveAction::Cancel,
+    ];
     let selection = prompt::handle_selection_opt(prompt::with_prompt_kind(prompt::PromptKind::FuzzySelectVim, || {
         FuzzySelect::with_theme(&ColorfulTheme::default())
-            .with_prompt(prompt_text)
+            .with_prompt(t!("action-prompt"))
             .items(&items)
             .default(0)
             .vim_mode(true)
             .with_initial_text("")
             .interact_opt()
     }));
+    selection.map(|idx| actions[idx])
+}
 
-    selection.map(|idx| presets[idx].clone())
+fn select_preset_for_management(store: &PresetStore, identity: &JobPresetIdentity) -> Option<PresetListSelection> {
+    let presets = store.sorted_presets(identity);
+    if presets.is_empty() {
+        let items = vec![t!("parameter-source-new-preset"), t!("action-back")];
+        let selection = select_management_item(&items);
+        return selection.map(|idx| {
+            if idx == 0 {
+                PresetListSelection::Create
+            } else {
+                PresetListSelection::Back
+            }
+        });
+    }
+
+    let mut items: Vec<String> = presets.iter().map(format_preset_item).collect();
+    items.push(t!("action-back"));
+    let selection = select_management_item(&items);
+    selection.map(|idx| {
+        if idx == presets.len() {
+            PresetListSelection::Back
+        } else {
+            PresetListSelection::Preset(presets[idx].clone())
+        }
+    })
+}
+
+fn select_management_item(items: &[String]) -> Option<usize> {
+    prompt::handle_selection_opt(prompt::with_prompt_kind(prompt::PromptKind::FuzzySelectVim, || {
+        FuzzySelect::with_theme(&ColorfulTheme::default())
+            .with_prompt(t!("preset-management"))
+            .items(items)
+            .default(0)
+            .vim_mode(true)
+            .with_initial_text("")
+            .interact_opt()
+    }))
+}
+
+fn format_preset_item(preset: &ParameterPreset) -> String {
+    let status = preset
+        .last_used_at
+        .map(|timestamp| t!("preset-last-used", "time" => format_preset_timestamp(timestamp)))
+        .unwrap_or_else(|| t!("preset-never-used"));
+    t!(
+        "preset-list-item",
+        "name" => preset.name.clone(),
+        "status" => status
+    )
+}
+
+fn format_preset_timestamp(timestamp: i64) -> String {
+    DateTime::from_timestamp(timestamp, 0)
+        .map(|utc| utc.with_timezone(&Local).format("%Y-%m-%d %H:%M").to_string())
+        .unwrap_or_else(|| "-".to_string())
+}
+
+fn prompt_unique_preset_name(store: &PresetStore, identity: &JobPresetIdentity) -> Option<String> {
+    loop {
+        let name = prompt_preset_name(None)?;
+        if !store.preset_exists(identity, &name) {
+            return Some(name);
+        }
+        println!("{}", t!("parameter-preset-exists", "name" => name).yellow());
+    }
 }
 
 pub fn apply_preset_defaults(

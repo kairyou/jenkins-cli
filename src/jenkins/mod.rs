@@ -54,7 +54,7 @@ struct JenkinsResponse {
 }
 
 // job config
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct JenkinsJobParameter {
     pub param_type: Option<ParamType>, // ParamType string, text, choice, boolean, password
     pub name: String,                  // parameter name
