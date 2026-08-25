@@ -28,7 +28,7 @@ fn parse_parameters_from_xml() {
                         </hudson.model.ChoiceParameterDefinition>
                         <hudson.model.BooleanParameterDefinition>
                             <name>Boolean test</name>
-                            <description>Boolean!</description>
+                            <description>Boolean &amp; safe!</description>
                             <defaultValue>true</defaultValue>
                         </hudson.model.BooleanParameterDefinition>
                         <hudson.model.FileParameterDefinition>
@@ -71,6 +71,9 @@ fn parse_parameters_from_xml() {
     assert_eq!(parameters[0].name, "Git_Branch");
     assert_eq!(parameters[0].default_value.as_deref(), Some("master"));
     assert_eq!(parameters[0].trim, Some(true));
+
+    let boolean_param = parameters.iter().find(|param| param.name == "Boolean test").unwrap();
+    assert_eq!(boolean_param.description.as_deref(), Some("Boolean & safe!"));
 
     let choice_values = parameters[1].choices.as_ref().expect("choice values exist");
     assert_eq!(choice_values.len(), 3);

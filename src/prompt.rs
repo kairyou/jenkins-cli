@@ -350,12 +350,12 @@ fn inject_key_sequence(keys: &[InjectedKey]) -> bool {
         let mut record: INPUT_RECORD = mem::zeroed();
         record.EventType = KEY_EVENT;
         let key = record.Event.KeyEvent_mut();
-        (*key).bKeyDown = is_key_down;
-        (*key).wRepeatCount = 1;
-        (*key).wVirtualKeyCode = key_spec.vk;
-        (*key).wVirtualScanCode = 0;
-        *(*key).uChar.UnicodeChar_mut() = key_spec.unicode_char;
-        (*key).dwControlKeyState = 0;
+        key.bKeyDown = is_key_down;
+        key.wRepeatCount = 1;
+        key.wVirtualKeyCode = key_spec.vk;
+        key.wVirtualScanCode = 0;
+        *key.uChar.UnicodeChar_mut() = key_spec.unicode_char;
+        key.dwControlKeyState = 0;
         record
     }
 

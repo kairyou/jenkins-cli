@@ -1,9 +1,8 @@
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use serde_json::{self, Value as JsonValue};
-use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
-use std::io::BufReader;
+use std::io::{BufRead, BufReader};
 
 use crate::constants::{ParamType, DEFAULT_PARAM_VALUE};
 pub mod client;
@@ -91,7 +90,22 @@ static PARAMETER_DEFINITIONS: Lazy<HashMap<&'static [u8], ParamType>> = Lazy::ne
 
 /// extract text from xml
 fn extract_text(e: quick_xml::events::BytesText) -> String {
-    e.unescape().unwrap_or_else(|_| Cow::from("")).trim().to_string()
+    let text = e.decode().unwrap_or_default();
+    quick_xml::escape::unescape(&text)
+        .unwrap_or_default()
+        .trim()
+        .to_string()
+}
+
+fn read_element_text<R: BufRead>(
+    reader: &mut quick_xml::Reader<R>,
+    end: quick_xml::name::QName<'_>,
+    buf: &mut Vec<u8>,
+) -> String {
+    buf.clear();
+    let text = reader.read_text_into(end, buf).map(extract_text).unwrap_or_default();
+    buf.clear();
+    text
 }
 
 /// Parse Jenkins job parameters from XML data.
@@ -99,6 +113,7 @@ pub fn parse_job_parameters_from_xml(xml_data: &str) -> Vec<JenkinsJobParameter>
     use quick_xml::events::Event;
     let mut reader = quick_xml::Reader::from_reader(BufReader::new(xml_data.as_bytes()));
     let mut buf = vec![];
+    let mut text_buf = vec![];
 
     let mut parameters = vec![];
     let mut current_param = JenkinsJobParameter::default();
@@ -113,59 +128,36 @@ pub fn parse_job_parameters_from_xml(xml_data: &str) -> Vec<JenkinsJobParameter>
                     current_param.param_type = Some(PARAMETER_DEFINITIONS[val].clone());
                 }
                 b"name" => {
-                    if let Ok(Event::Text(e)) = reader.read_event_into(&mut buf) {
-                        current_param.name = extract_text(e);
-                    }
+                    current_param.name = read_element_text(&mut reader, e.name(), &mut text_buf);
                 }
                 b"description" => {
-                    if let Ok(Event::Text(e)) = reader.read_event_into(&mut buf) {
-                        current_param.description = Some(extract_text(e));
-                    }
+                    current_param.description = Some(read_element_text(&mut reader, e.name(), &mut text_buf));
                 }
                 b"defaultValue" => {
-                    if let Ok(Event::Text(e)) = reader.read_event_into(&mut buf) {
-                        let value = extract_text(e);
-                        current_param.default_value =
-                            normalize_default_value(current_param.param_type.as_ref(), Some(value));
-                    }
+                    let value = read_element_text(&mut reader, e.name(), &mut text_buf);
+                    current_param.default_value =
+                        normalize_default_value(current_param.param_type.as_ref(), Some(value));
                 }
                 b"trim" => {
-                    if let Ok(Event::Text(e)) = reader.read_event_into(&mut buf) {
-                        current_param.trim = Some(extract_text(e) == "true");
-                    }
+                    current_param.trim = Some(read_element_text(&mut reader, e.name(), &mut text_buf) == "true");
                 }
                 b"credentialType" => {
-                    if let Ok(Event::Text(e)) = reader.read_event_into(&mut buf) {
-                        current_param.credential_type = Some(extract_text(e));
-                    }
+                    current_param.credential_type = Some(read_element_text(&mut reader, e.name(), &mut text_buf));
                 }
                 b"required" => {
-                    if let Ok(Event::Text(e)) = reader.read_event_into(&mut buf) {
-                        current_param.required = Some(extract_text(e) == "true");
-                    }
+                    current_param.required = Some(read_element_text(&mut reader, e.name(), &mut text_buf) == "true");
                 }
                 b"filter" => {
-                    if let Ok(Event::Text(e)) = reader.read_event_into(&mut buf) {
-                        current_param.filter = Some(extract_text(e));
-                    }
+                    current_param.filter = Some(read_element_text(&mut reader, e.name(), &mut text_buf));
                 }
                 b"projectName" => {
-                    if let Ok(Event::Text(e)) = reader.read_event_into(&mut buf) {
-                        current_param.project_name = Some(extract_text(e));
-                    }
+                    current_param.project_name = Some(read_element_text(&mut reader, e.name(), &mut text_buf));
                 }
                 b"choices" => {
                     inside_choices = true;
                 }
                 b"string" if inside_choices => {
-                    let choice = match reader.read_event_into(&mut buf) {
-                        Ok(Event::Text(e)) => extract_text(e), // regular <string>value</string>
-                        Ok(Event::End(ref end)) if end.name().as_ref() == b"string" => String::new(), // handles empty <string></string>
-                        Ok(Event::Eof) => break, // stop on unexpected EOF
-                        Ok(_) => String::new(),
-                        Err(e) => panic!("Error: {:?}", e),
-                    };
-                    choices.push(choice);
+                    choices.push(read_element_text(&mut reader, e.name(), &mut text_buf));
                 }
                 _ => {}
             },

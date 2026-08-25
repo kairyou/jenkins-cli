@@ -19,7 +19,8 @@ fn test_i18n_translation() {
 
     I18n::set_test_translations(translations); // set mock
 
-    // Test default locale
+    // Use a deterministic starting locale for the test.
+    I18n::set_locale("en-US");
     assert_eq!(I18n::locale(), "en-US");
 
     // Test setting locale

@@ -15,6 +15,9 @@ on:
           - edgeone_release
           - prerelease
 
+permissions:
+  contents: read
+
 jobs:
   release-corss:
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'prerelease' }}
@@ -28,16 +31,18 @@ jobs:
           - aarch64-unknown-linux-gnu # ARM64 Linux (GNU)
           - aarch64-unknown-linux-musl # ARM64 Linux (musl)
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - name: Read Rust toolchain
         id: rust-toolchain
         run: echo "toolchain=$(grep '^channel =' rust-toolchain.toml | cut -d '"' -f 2)" >> "$GITHUB_OUTPUT"
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
         with:
           toolchain: ${{ steps.rust-toolchain.outputs.toolchain }}
           targets: ${{ matrix.target }}
       - name: install cross
-        run: cargo install cross --git https://github.com/cross-rs/cross
+        run: cargo install cross --version 0.2.5 --locked
       - name: Build
         run: cross build --release --target=${{ matrix.target }}
       - name: Package
@@ -48,7 +53,7 @@ jobs:
             tar -czf jenkins-${{ matrix.target }}.tar.gz -C target/${{ matrix.target }}/release jenkins
           fi
       - name: Upload
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: jenkins-${{ matrix.target }}
           path: jenkins-${{ matrix.target }}.*
@@ -61,12 +66,14 @@ jobs:
         target:
           - x86_64-pc-windows-msvc # Windows (MSVC)
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - name: Read Rust toolchain
         id: rust-toolchain
         shell: bash
         run: echo "toolchain=$(grep '^channel =' rust-toolchain.toml | cut -d '"' -f 2)" >> "$GITHUB_OUTPUT"
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
         with:
           toolchain: ${{ steps.rust-toolchain.outputs.toolchain }}
           targets: ${{ matrix.target }}
@@ -75,7 +82,7 @@ jobs:
       - name: Package
         run: tar -czf jenkins-${{ matrix.target }}.tar.gz -C target/${{ matrix.target }}/release jenkins.exe
       - name: Upload
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: jenkins-${{ matrix.target }}
           path: jenkins-${{ matrix.target }}.*
@@ -89,11 +96,13 @@ jobs:
           - x86_64-apple-darwin # Intel Mac
           - aarch64-apple-darwin # M1/M2 Mac
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - name: Read Rust toolchain
         id: rust-toolchain
         run: echo "toolchain=$(grep '^channel =' rust-toolchain.toml | cut -d '"' -f 2)" >> "$GITHUB_OUTPUT"
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
         with:
           toolchain: ${{ steps.rust-toolchain.outputs.toolchain }}
           targets: ${{ matrix.target }}
@@ -102,7 +111,7 @@ jobs:
       - name: Package
         run: tar -czf jenkins-${{ matrix.target }}.tar.gz -C target/${{ matrix.target }}/release jenkins
       - name: Upload
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: jenkins-${{ matrix.target }}
           path: jenkins-${{ matrix.target }}.*
@@ -123,6 +132,8 @@ jobs:
     needs: [release-corss, release-windows, release-apple]
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'prerelease' }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Resolve release tag
         run: |
@@ -135,7 +146,7 @@ jobs:
           fi
           echo "RELEASE_TAG=$TAG" >> "$GITHUB_ENV"
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: artifacts
           pattern: jenkins-*
@@ -232,7 +243,7 @@ jobs:
           cat artifacts/checksums.txt
           jq . artifacts/dist-manifest.json
       - name: Upload release metadata
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: jenkins-release-metadata
           path: |
@@ -245,7 +256,7 @@ jobs:
             gh api -X DELETE "repos/${GITHUB_REPOSITORY}/git/refs/tags/${RELEASE_TAG}" || true
           fi
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -262,10 +273,12 @@ jobs:
     if: ${{ always() && ((github.event_name == 'workflow_dispatch' && inputs.mode == 'edgeone_release') || (github.event_name != 'workflow_dispatch' && needs.create-release.result == 'success')) }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - name: Download artifacts (workflow)
         if: ${{ github.event_name != 'workflow_dispatch' }}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: artifacts
           pattern: jenkins-*
@@ -292,7 +305,7 @@ jobs:
           LATEST_TAG="$(gh release view --json tagName -q .tagName 2>/dev/null || true)"
           echo "${LATEST_TAG}" > edgeone_dist/latest.txt
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22.11.0'
       - name: Deploy to EdgeOne Pages
