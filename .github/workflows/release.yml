@@ -421,6 +421,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - name: Resolve release tag
         run: |
@@ -541,16 +543,24 @@ jobs:
         run: |
           gh release delete "${RELEASE_TAG}" --yes || true
           gh api -X DELETE "repos/${GITHUB_REPOSITORY}/git/refs/tags/${RELEASE_TAG}" || true
-      - name: Create Release
-        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
+      - name: Create or update Release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          files: artifacts/*
-          generate_release_notes: true
-          tag_name: ${{ env.RELEASE_TAG }}
-          target_commitish: ${{ needs.prepare-release.outputs.release_sha }}
-          prerelease: ${{ env.PRERELEASE }}
+          RELEASE_SHA: ${{ needs.prepare-release.outputs.release_sha }}
+        run: |
+          set -euo pipefail
+
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            gh release upload "${RELEASE_TAG}" artifacts/* --clobber
+          elif [ "${PRERELEASE}" = "true" ]; then
+            gh release create "${RELEASE_TAG}" artifacts/* \
+              --generate-notes \
+              --prerelease \
+              --target "${RELEASE_SHA}"
+          else
+            gh release create "${RELEASE_TAG}" artifacts/* \
+              --generate-notes \
+              --verify-tag
+          fi
   # "Settings" > "Actions" > "General"
   # "Workflow permissions" > "Read and write permissions"
 
