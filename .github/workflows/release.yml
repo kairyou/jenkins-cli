@@ -16,11 +16,7 @@ on:
         options:
           - edgeone_release
           - prerelease
-          - repair_release
-      release_tag:
-        description: "Existing v* tag to repair (repair_release mode only)"
-        type: string
-        required: false
+          - repair_v0_1_31
 
 permissions:
   contents: read
@@ -51,7 +47,6 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           INPUT_MODE: ${{ inputs.mode }}
-          INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
           REF_NAME: ${{ github.ref_name }}
           REF_TYPE: ${{ github.ref_type }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
@@ -74,17 +69,13 @@ jobs:
               exit 0
             fi
 
-            if [ "${INPUT_MODE}" = "repair_release" ]; then
-              if [[ ! "${INPUT_RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-                echo "repair_release requires release_tag in vX.Y.Z format." >&2
-                exit 1
-              fi
-
-              release_sha="$(git rev-parse "${INPUT_RELEASE_TAG}^{commit}")"
+            if [ "${INPUT_MODE}" = "repair_v0_1_31" ]; then
+              repair_tag="v0.1.31"
+              release_sha="$(git rev-parse "${repair_tag}^{commit}")"
               git checkout --detach "${release_sha}"
               version="$(cargo metadata --locked --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "jenkins") | .version')"
-              if [ "${INPUT_RELEASE_TAG}" != "v${version}" ]; then
-                echo "${INPUT_RELEASE_TAG} contains Cargo version ${version}." >&2
+              if [ "${repair_tag}" != "v${version}" ]; then
+                echo "${repair_tag} contains Cargo version ${version}." >&2
                 exit 1
               fi
 
@@ -101,9 +92,9 @@ jobs:
               echo "formal=true" >> "$GITHUB_OUTPUT"
               echo "publish=${publish}" >> "$GITHUB_OUTPUT"
               echo "release_sha=${release_sha}" >> "$GITHUB_OUTPUT"
-              echo "release_tag=${INPUT_RELEASE_TAG}" >> "$GITHUB_OUTPUT"
+              echo "release_tag=${repair_tag}" >> "$GITHUB_OUTPUT"
               echo "version=${version}" >> "$GITHUB_OUTPUT"
-              echo "Repairing ${INPUT_RELEASE_TAG} from ${release_sha} (publish=${publish})."
+              echo "Repairing ${repair_tag} from ${release_sha} (publish=${publish})."
               exit 0
             fi
 
@@ -533,7 +524,7 @@ jobs:
 
   deploy-edgeone:
     needs: [prepare-release, create-release]
-    if: ${{ always() && ((github.event_name == 'workflow_dispatch' && inputs.mode == 'edgeone_release') || ((github.event_name != 'workflow_dispatch' || inputs.mode == 'repair_release') && needs.create-release.result == 'success')) }}
+    if: ${{ always() && ((github.event_name == 'workflow_dispatch' && inputs.mode == 'edgeone_release') || ((github.event_name != 'workflow_dispatch' || inputs.mode == 'repair_v0_1_31') && needs.create-release.result == 'success')) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -541,7 +532,7 @@ jobs:
           ref: ${{ needs.prepare-release.outputs.release_sha }}
           persist-credentials: false
       - name: Download artifacts (workflow)
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'repair_release' }}
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'repair_v0_1_31' }}
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: artifacts

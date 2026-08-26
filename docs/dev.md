@@ -127,7 +127,7 @@ gh workflow run prepare-release.yml -f bump=patch
 gh workflow run prepare-release.yml -f bump=patch -f auto_merge=true
 
 # Repair an incomplete existing release (do not publish or create v* tags locally).
-gh workflow run release.yml -f mode=repair_release -f release_tag=v0.1.31
+gh workflow run release.yml -f mode=repair_v0_1_31
 ```
 
 ### Test
