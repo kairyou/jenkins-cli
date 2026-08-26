@@ -213,6 +213,41 @@ fn test_apply_history_defaults() {
 }
 
 #[test]
+fn test_history_toml_round_trip_preserves_special_values() {
+    let (mut history, _temp_dir) = setup_test_history();
+    let mut params = HashMap::new();
+    params.insert(
+        "说明".to_string(),
+        ParamInfo {
+            value: "引号 \"、反斜杠 \\\\ 和换行\n第二行".to_string(),
+            r#type: ParamType::Text,
+        },
+    );
+
+    let mut entry = HistoryEntry {
+        job_url: format!("{}/job1", BASE_URL),
+        name: "Job1".to_string(),
+        display_name: Some("显示名 & 特殊值".to_string()),
+        params: Some(params),
+        ..Default::default()
+    };
+    history.upsert_history(&mut entry).unwrap();
+
+    let mut loaded = History {
+        entries: vec![],
+        file_path: history.file_path.clone(),
+        version: None,
+    };
+    loaded.load_history().unwrap();
+
+    let loaded_entry = &loaded.entries[0];
+    assert_eq!(loaded_entry.display_name.as_deref(), Some("显示名 & 特殊值"));
+    let loaded_param = &loaded_entry.params.as_ref().unwrap()["说明"];
+    assert_eq!(loaded_param.value, "引号 \"、反斜杠 \\\\ 和换行\n第二行");
+    assert_eq!(loaded_param.r#type, ParamType::Text);
+}
+
+#[test]
 fn test_migrate_history_v0_yaml() {
     let temp_dir = tempdir().unwrap();
     let yaml_path = temp_dir.path().join("test_history.yaml");
