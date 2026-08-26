@@ -115,8 +115,23 @@ cargo clippy --all-targets --all-features -- -D warnings # --fix --allow-dirty
 # cargo doc --no-deps # Generate documentation
 # python3 -m http.server 8000 -d ./target/doc/jenkins/ # Preview documentation
 
-# cargo install cargo-release
-cargo release patch --execute --no-publish # auto update version and push tag to remote
+# Install once: cargo install cargo-release
+# Preview the next patch release without changing files or Git history.
+# cargo release patch
+# Run the checks before creating the release commit and tag.
+cargo test --locked --all-targets --all-features
+cargo fmt -- --check
+cargo clippy --locked --all-targets --all-features -- -D warnings
+cargo package --locked
+# Prepare a release branch. The version commit goes through a pull request;
+# create and push the tag only after the pull request is merged.
+git switch -c release/v0.1.31
+cargo release patch --execute --no-publish --no-tag --no-push
+git push -u origin release/v0.1.31
+# After merging the pull request:
+# git switch main && git pull --ff-only
+# git tag -a v0.1.31 -m "Release jenkins version 0.1.31"
+# git push origin v0.1.31
 # publish to cargo.io
 # cargo login
 cargo publish # publish to crates.io
