@@ -2,6 +2,8 @@ name: Release
 
 on:
   push:
+    branches:
+      - main
     tags:
       - "v*"
   workflow_dispatch:
@@ -14,13 +16,174 @@ on:
         options:
           - edgeone_release
           - prerelease
+          - repair_v0_1_31
 
 permissions:
   contents: read
+  pull-requests: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
+  prepare-release:
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.release.outputs.build }}
+      formal: ${{ steps.release.outputs.formal }}
+      publish: ${{ steps.release.outputs.publish }}
+      release_sha: ${{ steps.release.outputs.release_sha }}
+      release_tag: ${{ steps.release.outputs.release_tag }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Resolve release
+        id: release
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_MODE: ${{ inputs.mode }}
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          RELEASE_SHA: ${{ github.sha }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          echo "build=false" >> "$GITHUB_OUTPUT"
+          echo "formal=false" >> "$GITHUB_OUTPUT"
+          echo "publish=false" >> "$GITHUB_OUTPUT"
+          echo "release_sha=${RELEASE_SHA}" >> "$GITHUB_OUTPUT"
+          echo "release_tag=" >> "$GITHUB_OUTPUT"
+          echo "version=" >> "$GITHUB_OUTPUT"
+
+          if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
+            if [ "${INPUT_MODE}" = "prerelease" ]; then
+              echo "build=true" >> "$GITHUB_OUTPUT"
+              echo "release_tag=prerelease" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            if [ "${INPUT_MODE}" = "repair_v0_1_31" ]; then
+              repair_tag="v0.1.31"
+              release_sha="$(git rev-parse "${repair_tag}^{commit}")"
+              git checkout --detach "${release_sha}"
+              version="$(cargo metadata --locked --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "jenkins") | .version')"
+              if [ "${repair_tag}" != "v${version}" ]; then
+                echo "${repair_tag} contains Cargo version ${version}." >&2
+                exit 1
+              fi
+
+              status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+                --header 'User-Agent: jenkins-cli-release (github.com/kairyou/jenkins-cli)' \
+                "https://crates.io/api/v1/crates/jenkins/${version}")"
+              case "${status}" in
+                200) publish=false ;;
+                404) publish=true ;;
+                *) echo "crates.io returned HTTP ${status}" >&2; exit 1 ;;
+              esac
+
+              echo "build=true" >> "$GITHUB_OUTPUT"
+              echo "formal=true" >> "$GITHUB_OUTPUT"
+              echo "publish=${publish}" >> "$GITHUB_OUTPUT"
+              echo "release_sha=${release_sha}" >> "$GITHUB_OUTPUT"
+              echo "release_tag=${repair_tag}" >> "$GITHUB_OUTPUT"
+              echo "version=${version}" >> "$GITHUB_OUTPUT"
+              echo "Repairing ${repair_tag} from ${release_sha} (publish=${publish})."
+              exit 0
+            fi
+
+            exit 0
+          fi
+
+          if [ "${REF_TYPE}" = "tag" ]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            echo "release_tag=${REF_NAME}" >> "$GITHUB_OUTPUT"
+            echo "version=${REF_NAME#v}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # A push to main is only a formal-release trigger when its commit is
+          # associated with a merged release PR created from this repository.
+          # Ordinary contributor PRs and direct pushes stop here, even if they
+          # accidentally edit Cargo.toml's version.
+          pull_requests="$(GH_TOKEN="${GITHUB_TOKEN}" gh api \
+            --header 'Accept: application/vnd.github+json' \
+            "repos/${GITHUB_REPOSITORY}/commits/${RELEASE_SHA}/pulls")"
+          release_pr="$(jq -r --arg repository "${GITHUB_REPOSITORY}" '
+            [.[] | select(
+              .merged_at != null and
+              .base.ref == "main" and
+              .head.repo.full_name == $repository and
+              (.head.ref | startswith("release/v"))
+            )] |
+            first |
+            if . == null then empty else [.head.ref, .title] | @tsv end
+          ' <<< "${pull_requests}")"
+
+          if [ -z "${release_pr}" ]; then
+            echo "${RELEASE_SHA} is not the result of an in-repository release PR; skipping."
+            exit 0
+          fi
+
+          release_branch="${release_pr%%$'\t'*}"
+          release_title="${release_pr#*$'\t'}"
+          version="$(cargo metadata --locked --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "jenkins") | .version')"
+          tag="v${version}"
+          expected_branch="release/${tag}"
+          expected_title="chore: release ${tag}"
+
+          if [ "${release_branch}" != "${expected_branch}" ] || [ "${release_title}" != "${expected_title}" ]; then
+            echo "Release PR identity does not match Cargo version ${version}." >&2
+            echo "Expected branch/title: ${expected_branch} / ${expected_title}" >&2
+            echo "Actual branch/title:   ${release_branch} / ${release_title}" >&2
+            exit 1
+          fi
+
+          # An existing immutable tag means this version has already passed the
+          # formal release boundary. This also keeps historical tagged versions
+          # from being republished if they were never uploaded to crates.io.
+          if git rev-parse --verify --quiet "${tag}^{commit}" >/dev/null; then
+            tagged_sha="$(git rev-parse "${tag}^{commit}")"
+            if [ "${RUN_ATTEMPT}" -gt 1 ] && [ "${tagged_sha}" = "${RELEASE_SHA}" ]; then
+              echo "Retrying ${tag} from its original release commit."
+              echo "build=true" >> "$GITHUB_OUTPUT"
+              echo "formal=true" >> "$GITHUB_OUTPUT"
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+              echo "release_tag=${tag}" >> "$GITHUB_OUTPUT"
+              echo "version=${version}" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            echo "${tag} already exists at ${tagged_sha}; no formal release is pending."
+            exit 0
+          fi
+
+          status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            --header 'User-Agent: jenkins-cli-release (github.com/kairyou/jenkins-cli)' \
+            "https://crates.io/api/v1/crates/jenkins/${version}")"
+
+          case "${status}" in
+            200) publish=false ;;
+            404) publish=true ;;
+            *) echo "crates.io returned HTTP ${status}" >&2; exit 1 ;;
+          esac
+
+          echo "build=true" >> "$GITHUB_OUTPUT"
+          echo "formal=true" >> "$GITHUB_OUTPUT"
+          echo "publish=${publish}" >> "$GITHUB_OUTPUT"
+          echo "release_tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "Preparing ${tag} from ${RELEASE_SHA} (publish=${publish})."
+
   release-cross:
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'prerelease' }}
+    needs: prepare-release
+    if: ${{ needs.prepare-release.outputs.build == 'true' }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -31,8 +194,17 @@ jobs:
           - aarch64-unknown-linux-gnu # ARM64 Linux (GNU)
           - aarch64-unknown-linux-musl # ARM64 Linux (musl)
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Checkout release commit
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode != 'repair_v0_1_31' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Checkout v0.1.31 repair commit
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'repair_v0_1_31' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: v0.1.31
           persist-credentials: false
       - name: Read Rust toolchain
         id: rust-toolchain
@@ -44,7 +216,7 @@ jobs:
       - name: install cross
         run: cargo install cross --version 0.2.5 --locked
       - name: Build
-        run: cross build --release --target=${{ matrix.target }}
+        run: cross build --locked --release --target=${{ matrix.target }}
       - name: Package
         run: |
           if [[ "${{ matrix.target }}" == *"-windows-"* ]]; then
@@ -59,15 +231,25 @@ jobs:
           path: jenkins-${{ matrix.target }}.*
 
   release-windows:
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'prerelease' }}
+    needs: prepare-release
+    if: ${{ needs.prepare-release.outputs.build == 'true' }}
     runs-on: windows-latest
     strategy:
       matrix:
         target:
           - x86_64-pc-windows-msvc # Windows (MSVC)
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Checkout release commit
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode != 'repair_v0_1_31' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Checkout v0.1.31 repair commit
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'repair_v0_1_31' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: v0.1.31
           persist-credentials: false
       - name: Read Rust toolchain
         id: rust-toolchain
@@ -78,7 +260,7 @@ jobs:
           toolchain: ${{ steps.rust-toolchain.outputs.toolchain }}
           targets: ${{ matrix.target }}
       - name: Build
-        run: cargo build --release --target=${{ matrix.target }}
+        run: cargo build --locked --release --target=${{ matrix.target }}
       - name: Package
         run: tar -czf jenkins-${{ matrix.target }}.tar.gz -C target/${{ matrix.target }}/release jenkins.exe
       - name: Upload
@@ -88,7 +270,8 @@ jobs:
           path: jenkins-${{ matrix.target }}.*
 
   release-apple:
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'prerelease' }}
+    needs: prepare-release
+    if: ${{ needs.prepare-release.outputs.build == 'true' }}
     runs-on: macos-latest
     strategy:
       matrix:
@@ -96,8 +279,17 @@ jobs:
           - x86_64-apple-darwin # Intel Mac
           - aarch64-apple-darwin # M1/M2 Mac
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Checkout release commit
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode != 'repair_v0_1_31' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Checkout v0.1.31 repair commit
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'repair_v0_1_31' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: v0.1.31
           persist-credentials: false
       - name: Read Rust toolchain
         id: rust-toolchain
@@ -107,7 +299,7 @@ jobs:
           toolchain: ${{ steps.rust-toolchain.outputs.toolchain }}
           targets: ${{ matrix.target }}
       - name: Build
-        run: cargo build --release --target=${{ matrix.target }}
+        run: cargo build --locked --release --target=${{ matrix.target }}
       - name: Package
         run: tar -czf jenkins-${{ matrix.target }}.tar.gz -C target/${{ matrix.target }}/release jenkins
       - name: Upload
@@ -128,20 +320,115 @@ jobs:
   #     - name: Build
   #       run: wasm-pack build --target web
 
+  publish-crate:
+    needs: [prepare-release, release-cross, release-windows, release-apple]
+    if: ${{ needs.prepare-release.outputs.build == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout release commit
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode != 'repair_v0_1_31' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Checkout v0.1.31 repair commit
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'repair_v0_1_31' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: v0.1.31
+          persist-credentials: false
+
+      - name: Read Rust toolchain
+        if: ${{ needs.prepare-release.outputs.publish == 'true' }}
+        id: rust-toolchain
+        run: echo "toolchain=$(grep '^channel =' rust-toolchain.toml | cut -d '"' -f 2)" >> "$GITHUB_OUTPUT"
+
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+        if: ${{ needs.prepare-release.outputs.publish == 'true' }}
+        with:
+          toolchain: ${{ steps.rust-toolchain.outputs.toolchain }}
+
+      - name: Publish crate
+        if: ${{ needs.prepare-release.outputs.publish == 'true' }}
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --locked
+
+      - name: Wait for crates.io index
+        if: ${{ needs.prepare-release.outputs.formal == 'true' }}
+        env:
+          VERSION: ${{ needs.prepare-release.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          for attempt in {1..20}; do
+            status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+              --header 'User-Agent: jenkins-cli-release (github.com/kairyou/jenkins-cli)' \
+              "https://crates.io/api/v1/crates/jenkins/${VERSION}")"
+            if [ "${status}" = "200" ]; then
+              echo "jenkins ${VERSION} is available on crates.io."
+              exit 0
+            fi
+            echo "Waiting for crates.io to expose jenkins ${VERSION} (attempt ${attempt}/20, HTTP ${status})..."
+            sleep 6
+          done
+
+          echo "jenkins ${VERSION} was not visible on crates.io after two minutes." >&2
+          exit 1
+
+      - name: Create annotated release tag
+        if: ${{ needs.prepare-release.outputs.formal == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ needs.prepare-release.outputs.release_sha }}
+          RELEASE_TAG: ${{ needs.prepare-release.outputs.release_tag }}
+          VERSION: ${{ needs.prepare-release.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          existing="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" --jq '.object.sha' 2>/dev/null || true)"
+          if [ -n "${existing}" ]; then
+            object_type="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" --jq '.object.type')"
+            if [ "${object_type}" = "tag" ]; then
+              peeled="$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${existing}" --jq '.object.sha')"
+            else
+              peeled="${existing}"
+            fi
+            if [ "${peeled}" != "${RELEASE_SHA}" ]; then
+              echo "${RELEASE_TAG} already points to ${peeled}, expected ${RELEASE_SHA}." >&2
+              exit 1
+            fi
+            echo "${RELEASE_TAG} already exists."
+            exit 0
+          fi
+
+          tag_object="$(gh api --method POST "repos/${GITHUB_REPOSITORY}/git/tags" \
+            -f tag="${RELEASE_TAG}" \
+            -f message="Release jenkins version ${VERSION}" \
+            -f object="${RELEASE_SHA}" \
+            -f type=commit \
+            --jq '.sha')"
+
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+            -f ref="refs/tags/${RELEASE_TAG}" \
+            -f sha="${tag_object}"
+
   create-release:
-    needs: [release-cross, release-windows, release-apple]
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'prerelease' }}
+    needs: [prepare-release, release-cross, release-windows, release-apple, publish-crate]
+    if: ${{ needs.prepare-release.outputs.build == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - name: Resolve release tag
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.mode }}" = "prerelease" ]; then
+          if [ "${{ needs.prepare-release.outputs.release_tag }}" = "prerelease" ]; then
             TAG="prerelease"
             echo "PRERELEASE=true" >> "$GITHUB_ENV"
           else
-            TAG="${{ github.ref_name }}"
+            TAG="${{ needs.prepare-release.outputs.release_tag }}"
             echo "PRERELEASE=false" >> "$GITHUB_ENV"
           fi
           echo "RELEASE_TAG=$TAG" >> "$GITHUB_ENV"
@@ -249,12 +536,11 @@ jobs:
           path: |
             artifacts/checksums.txt
             artifacts/dist-manifest.json
-      - name: Delete existing release (if needed)
+      - name: Replace mutable prerelease
+        if: ${{ needs.prepare-release.outputs.release_tag == 'prerelease' }}
         run: |
           gh release delete "${RELEASE_TAG}" --yes || true
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.mode }}" = "prerelease" ]; then
-            gh api -X DELETE "repos/${GITHUB_REPOSITORY}/git/refs/tags/${RELEASE_TAG}" || true
-          fi
+          gh api -X DELETE "repos/${GITHUB_REPOSITORY}/git/refs/tags/${RELEASE_TAG}" || true
       - name: Create Release
         uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
         env:
@@ -263,21 +549,30 @@ jobs:
           files: artifacts/*
           generate_release_notes: true
           tag_name: ${{ env.RELEASE_TAG }}
-          target_commitish: ${{ github.sha }}
+          target_commitish: ${{ needs.prepare-release.outputs.release_sha }}
           prerelease: ${{ env.PRERELEASE }}
   # "Settings" > "Actions" > "General"
   # "Workflow permissions" > "Read and write permissions"
 
   deploy-edgeone:
-    needs: create-release
-    if: ${{ always() && ((github.event_name == 'workflow_dispatch' && inputs.mode == 'edgeone_release') || (github.event_name != 'workflow_dispatch' && needs.create-release.result == 'success')) }}
+    needs: [prepare-release, create-release]
+    if: ${{ always() && ((github.event_name == 'workflow_dispatch' && inputs.mode == 'edgeone_release') || ((github.event_name != 'workflow_dispatch' || inputs.mode == 'repair_v0_1_31') && needs.create-release.result == 'success')) }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Checkout release commit
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode != 'repair_v0_1_31' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Checkout v0.1.31 repair commit
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'repair_v0_1_31' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: v0.1.31
           persist-credentials: false
       - name: Download artifacts (workflow)
-        if: ${{ github.event_name != 'workflow_dispatch' }}
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'repair_v0_1_31' }}
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: artifacts

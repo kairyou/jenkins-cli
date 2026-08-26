@@ -27,7 +27,7 @@ jobs:
           toolchain: ${{ steps.rust-toolchain.outputs.toolchain }}
           components: clippy, rustfmt
       - name: Run clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: cargo clippy --locked --all-targets --all-features -- -D warnings
       - name: Check formatting
         run: cargo fmt -- --check
 
@@ -44,4 +44,6 @@ jobs:
         with:
           toolchain: ${{ steps.rust-toolchain.outputs.toolchain }}
       - name: Run tests
-        run: cargo test -v --no-fail-fast
+        run: cargo test --locked --all-targets --all-features
+      - name: Verify package
+        run: cargo package --locked

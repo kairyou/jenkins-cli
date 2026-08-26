@@ -1,0 +1,150 @@
+name: Prepare Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Semantic version bump"
+        type: choice
+        required: true
+        default: patch
+        options:
+          - patch
+          - minor
+          - major
+      auto_merge:
+        description: "Enable auto-merge after required checks pass"
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: prepare-release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          # A GitHub App or fine-grained PAT makes CI run normally on the
+          # generated PR. Without it, GitHub may require manual workflow approval.
+          token: ${{ secrets.RELEASE_PR_TOKEN || github.token }}
+
+      - name: Read Rust toolchain
+        id: rust-toolchain
+        run: echo "toolchain=$(grep '^channel =' rust-toolchain.toml | cut -d '"' -f 2)" >> "$GITHUB_OUTPUT"
+
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+        with:
+          toolchain: ${{ steps.rust-toolchain.outputs.toolchain }}
+
+      - name: Install cargo-release
+        run: cargo install cargo-release --version 1.1.4 --locked
+
+      - name: Resolve next version
+        id: version
+        env:
+          BUMP: ${{ inputs.bump }}
+        run: |
+          set -euo pipefail
+
+          current="$(cargo metadata --locked --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "jenkins") | .version')"
+          IFS=. read -r major minor patch <<< "${current}"
+
+          case "${BUMP}" in
+            patch) next="${major}.${minor}.$((patch + 1))" ;;
+            minor) next="${major}.$((minor + 1)).0" ;;
+            major) next="$((major + 1)).0.0" ;;
+            *) echo "Unsupported bump: ${BUMP}" >&2; exit 1 ;;
+          esac
+
+          branch="release/v${next}"
+          if git ls-remote --exit-code --heads origin "refs/heads/${branch}" >/dev/null 2>&1; then
+            exists=true
+          else
+            exists=false
+          fi
+
+          echo "current=${current}" >> "$GITHUB_OUTPUT"
+          echo "next=${next}" >> "$GITHUB_OUTPUT"
+          echo "branch=${branch}" >> "$GITHUB_OUTPUT"
+          echo "exists=${exists}" >> "$GITHUB_OUTPUT"
+
+      - name: Create version commit
+        env:
+          BUMP: ${{ inputs.bump }}
+          BRANCH: ${{ steps.version.outputs.branch }}
+          BRANCH_EXISTS: ${{ steps.version.outputs.exists }}
+          EXPECTED_VERSION: ${{ steps.version.outputs.next }}
+        run: |
+          set -euo pipefail
+
+          if [ "${BRANCH_EXISTS}" = "true" ]; then
+            git fetch origin "${BRANCH}"
+            git switch -c "${BRANCH}" --track "origin/${BRANCH}"
+          else
+            git switch -c "${BRANCH}"
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+            cargo release "${BUMP}" \
+              --execute \
+              --no-confirm \
+              --no-publish \
+              --no-tag \
+              --no-push
+          fi
+
+          actual="$(cargo metadata --locked --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "jenkins") | .version')"
+          if [ "${actual}" != "${EXPECTED_VERSION}" ]; then
+            echo "Expected version ${EXPECTED_VERSION}, cargo-release produced ${actual}" >&2
+            exit 1
+          fi
+
+          if [ "${BRANCH_EXISTS}" = "false" ]; then
+            git push --set-upstream origin "${BRANCH}"
+          fi
+
+      - name: Open release pull request
+        id: pull-request
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PR_TOKEN || github.token }}
+          BRANCH: ${{ steps.version.outputs.branch }}
+          VERSION: ${{ steps.version.outputs.next }}
+        run: |
+          set -euo pipefail
+
+          url="$(gh pr list --base main --head "${BRANCH}" --state open --json url --jq '.[0].url')"
+          if [ -z "${url}" ]; then
+            url="$(gh pr create \
+              --base main \
+              --head "${BRANCH}" \
+              --title "chore: release v${VERSION}" \
+              --body "Automated release preparation for \`v${VERSION}\`. Merge this pull request to publish the crate and create the GitHub release.")"
+          fi
+
+          echo "url=${url}" >> "$GITHUB_OUTPUT"
+          echo "Created ${url}"
+
+      - name: Enable auto-merge
+        if: ${{ inputs.auto_merge }}
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PR_TOKEN || github.token }}
+          PR_URL: ${{ steps.pull-request.outputs.url }}
+        run: gh pr merge "${PR_URL}" --auto --squash
+
+      - name: Add summary
+        env:
+          PR_URL: ${{ steps.pull-request.outputs.url }}
+          VERSION: ${{ steps.version.outputs.next }}
+        run: |
+          echo "## Release v${VERSION}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Created release pull request: ${PR_URL}" >> "$GITHUB_STEP_SUMMARY"
