@@ -106,7 +106,7 @@ cargo build --target x86_64-unknown-linux-gnu --release # build for linux
 # Analyze binary file size
 # cargo bloat --release --crates # cargo install cargo-bloat
 
-# = Release
+# Checks
 # rustup update stable
 cargo test -v --no-fail-fast # test
 cargo fmt -- --check # Check code formatting
@@ -115,26 +115,19 @@ cargo clippy --all-targets --all-features -- -D warnings # --fix --allow-dirty
 # cargo doc --no-deps # Generate documentation
 # python3 -m http.server 8000 -d ./target/doc/jenkins/ # Preview documentation
 
-# Install once: cargo install cargo-release
-# Preview the next patch release without changing files or Git history.
-# cargo release patch
-# Run the checks before creating the release commit and tag.
-cargo test --locked --all-targets --all-features
-cargo fmt -- --check
-cargo clippy --locked --all-targets --all-features -- -D warnings
-cargo package --locked
-# Prepare a release branch. The version commit goes through a pull request;
-# create and push the tag only after the pull request is merged.
-git switch -c release/v0.1.31
-cargo release patch --execute --no-publish --no-tag --no-push
-git push -u origin release/v0.1.31
-# After merging the pull request:
-# git switch main && git pull --ff-only
-# git tag -a v0.1.31 -m "Release jenkins version 0.1.31"
-# git push origin v0.1.31
-# publish to cargo.io
+# Manual equivalent (reference only; the workflow below replaces these steps).
+# cargo release patch --execute --no-publish
 # cargo login
-cargo publish # publish to crates.io
+# cargo publish
+
+# Release: create a release PR; merging it publishes crates.io, tag and binaries.
+gh workflow run prepare-release.yml -f bump=patch
+
+# Optional: merge automatically after required checks and reviews pass.
+gh workflow run prepare-release.yml -f bump=patch -f auto_merge=true
+
+# Repair an incomplete existing release (do not publish or create v* tags locally).
+gh workflow run release.yml -f mode=repair_release -f release_tag=v0.1.31
 ```
 
 ### Test
