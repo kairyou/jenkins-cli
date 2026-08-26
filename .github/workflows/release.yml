@@ -194,9 +194,17 @@ jobs:
           - aarch64-unknown-linux-gnu # ARM64 Linux (GNU)
           - aarch64-unknown-linux-musl # ARM64 Linux (musl)
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Checkout release commit
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode != 'repair_v0_1_31' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.prepare-release.outputs.release_sha }}
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Checkout v0.1.31 repair commit
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'repair_v0_1_31' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: v0.1.31
           persist-credentials: false
       - name: Read Rust toolchain
         id: rust-toolchain
@@ -231,9 +239,17 @@ jobs:
         target:
           - x86_64-pc-windows-msvc # Windows (MSVC)
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Checkout release commit
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode != 'repair_v0_1_31' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.prepare-release.outputs.release_sha }}
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Checkout v0.1.31 repair commit
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'repair_v0_1_31' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: v0.1.31
           persist-credentials: false
       - name: Read Rust toolchain
         id: rust-toolchain
@@ -263,9 +279,17 @@ jobs:
           - x86_64-apple-darwin # Intel Mac
           - aarch64-apple-darwin # M1/M2 Mac
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Checkout release commit
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode != 'repair_v0_1_31' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.prepare-release.outputs.release_sha }}
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Checkout v0.1.31 repair commit
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'repair_v0_1_31' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: v0.1.31
           persist-credentials: false
       - name: Read Rust toolchain
         id: rust-toolchain
@@ -303,9 +327,17 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Checkout release commit
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode != 'repair_v0_1_31' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.prepare-release.outputs.release_sha }}
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Checkout v0.1.31 repair commit
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'repair_v0_1_31' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: v0.1.31
           persist-credentials: false
 
       - name: Read Rust toolchain
@@ -527,9 +559,17 @@ jobs:
     if: ${{ always() && ((github.event_name == 'workflow_dispatch' && inputs.mode == 'edgeone_release') || ((github.event_name != 'workflow_dispatch' || inputs.mode == 'repair_v0_1_31') && needs.create-release.result == 'success')) }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Checkout release commit
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode != 'repair_v0_1_31' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.prepare-release.outputs.release_sha }}
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Checkout v0.1.31 repair commit
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'repair_v0_1_31' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: v0.1.31
           persist-credentials: false
       - name: Download artifacts (workflow)
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'repair_v0_1_31' }}
