@@ -30,13 +30,22 @@ jobs:
   prepare:
     runs-on: ubuntu-latest
     steps:
+      - name: Check release token
+        env:
+          RELEASE_PR_TOKEN: ${{ secrets.RELEASE_PR_TOKEN }}
+        run: |
+          test -n "${RELEASE_PR_TOKEN}" || {
+            echo "RELEASE_PR_TOKEN secret is not configured." >&2
+            echo "Configure a fine-grained PAT scoped to this repository with Contents and Pull requests read/write access." >&2
+            exit 1
+          }
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
           fetch-depth: 0
-          # A GitHub App or fine-grained PAT makes CI run normally on the
-          # generated PR. Without it, GitHub may require manual workflow approval.
-          token: ${{ secrets.RELEASE_PR_TOKEN || github.token }}
+          # Use a non-GITHUB_TOKEN identity so the generated PR triggers CI.
+          token: ${{ secrets.RELEASE_PR_TOKEN }}
 
       - name: Read Rust toolchain
         id: rust-toolchain
@@ -116,7 +125,7 @@ jobs:
       - name: Open release pull request
         id: pull-request
         env:
-          GH_TOKEN: ${{ secrets.RELEASE_PR_TOKEN || github.token }}
+          GH_TOKEN: ${{ secrets.RELEASE_PR_TOKEN }}
           BRANCH: ${{ steps.version.outputs.branch }}
           VERSION: ${{ steps.version.outputs.next }}
         run: |
@@ -137,7 +146,7 @@ jobs:
       - name: Enable auto-merge
         if: ${{ inputs.auto_merge }}
         env:
-          GH_TOKEN: ${{ secrets.RELEASE_PR_TOKEN || github.token }}
+          GH_TOKEN: ${{ secrets.RELEASE_PR_TOKEN }}
           PR_URL: ${{ steps.pull-request.outputs.url }}
         run: gh pr merge "${PR_URL}" --auto --squash
 
