@@ -228,9 +228,9 @@ Jenkins User ID 就是登录 Jenkins 网页界面的用户名。
 - [x] i18n 支持 (fluent)
 - [x] 自动检查更新
 
-## Star 趋势
+## Stars
 
-[![Stargazers over time](https://starchart.cc/kairyou/jenkins-cli.svg?variant=adaptive)](https://starchart.cc/kairyou/jenkins-cli)
+[![GitHub stars](https://img.shields.io/github/stars/kairyou/jenkins-cli?style=flat-square&logo=github&label=Stars)](https://github.com/kairyou/jenkins-cli/stargazers)
 
 ## 许可证
 

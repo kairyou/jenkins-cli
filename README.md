@@ -228,8 +228,9 @@ Note: Keep your API token secure. Do not share it or commit it to version contro
 - [x] i18n support (fluent)
 - [x] Automatically check for updates
 
-## Stargazers over time
-[![Stargazers over time](https://starchart.cc/kairyou/jenkins-cli.svg?variant=adaptive)](https://starchart.cc/kairyou/jenkins-cli)
+## Stars
+
+[![GitHub stars](https://img.shields.io/github/stars/kairyou/jenkins-cli?style=flat-square&logo=github&label=Stars)](https://github.com/kairyou/jenkins-cli/stargazers)
 
 ## License
 
