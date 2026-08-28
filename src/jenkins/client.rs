@@ -148,10 +148,22 @@ impl JenkinsClient {
                         _ => "Request failed",
                     };
 
-                    eprintln!("Error: {}", error_message.red());
+                    let response_body = response.text().await.unwrap_or_default();
+                    let response_body = response_body.trim();
+                    eprintln!("Error: {} (HTTP {})", error_message.red(), status);
                     eprintln!("URL: {}", url);
-                    // eprintln!("Response headers: {:?}", response.headers().clone());
-                    // eprintln!("Response body: {}", response.text().await?);
+                    if !response_body.is_empty() {
+                        const MAX_ERROR_BODY_LENGTH: usize = 1000;
+                        let body = if response_body.len() > MAX_ERROR_BODY_LENGTH {
+                            format!(
+                                "{}...",
+                                response_body.chars().take(MAX_ERROR_BODY_LENGTH).collect::<String>()
+                            )
+                        } else {
+                            response_body.to_string()
+                        };
+                        eprintln!("Response: {}", body);
+                    }
 
                     return Err(anyhow::anyhow!("{} Status code: {}", error_message, status));
                 }
@@ -936,6 +948,7 @@ impl JenkinsClient {
         let api_url = format_url(&format!("{}/api/json", queue_url));
         let mut spinner = Some(spinner::Spinner::new(t!("polling-queue-item")));
         let mut paused = false;
+        let mut status_failures = 0u32;
 
         loop {
             tokio::select! {
@@ -943,8 +956,29 @@ impl JenkinsClient {
                     if paused {
                         continue;
                     }
-                    let response = self.get_with_refresh(&api_url).await?;
-                    let queue_item: serde_json::Value = response.json().await?;
+                    let response = match self.get_with_refresh(&api_url).await {
+                        Ok(response) => response,
+                        Err(error) => {
+                            status_failures += 1;
+                            if status_failures == 1 || status_failures.is_multiple_of(5) {
+                                eprintln!("Queue status unavailable; retrying: {}", error);
+                            }
+                            self.wait_for_retry_or_cancel(event_receiver, 1000).await?;
+                            continue;
+                        }
+                    };
+                    let queue_item: serde_json::Value = match response.json().await {
+                        Ok(queue_item) => queue_item,
+                        Err(error) => {
+                            status_failures += 1;
+                            if status_failures == 1 || status_failures.is_multiple_of(5) {
+                                eprintln!("Invalid queue response; retrying: {}", error);
+                            }
+                            self.wait_for_retry_or_cancel(event_receiver, 1000).await?;
+                            continue;
+                        }
+                    };
+                    status_failures = 0;
                     // println!("{}, queue: {:?}", api_url, queue_item);
                     if let Some(executable) = queue_item["executable"].as_object() {
                         // if let Some(build_url) = executable["url"].as_str() // maybe domain is different
@@ -1023,6 +1057,8 @@ impl JenkinsClient {
         let mut paused = false;
         let mut last_log_offset = 0; // Initialize the offset of the last read log
         let mut recent_console_html = String::new();
+        let mut status_failures = 0u32;
+        let mut console_failures = 0u32;
         let mut downstream_jobs = Vec::new();
         let mut downstream_hrefs = HashSet::new();
         let should_follow_downstream = allow_downstream && self.follow_downstream;
@@ -1040,8 +1076,41 @@ impl JenkinsClient {
                     if paused {
                         continue;
                     }
-                    let response = self.get_with_refresh(&api_url).await?;
-                    let build_info: serde_json::Value = response.json().await?;
+                    let response = match self.get_with_refresh(&api_url).await {
+                        Ok(response) => response,
+                        Err(error) => {
+                            status_failures += 1;
+                            if status_failures == 1 || status_failures.is_multiple_of(5) {
+                                terminal::print_line(
+                                    format!("Build status unavailable; retrying: {}", error).yellow(),
+                                );
+                            }
+                            self.wait_for_retry_or_cancel(event_receiver, 1000).await?;
+                            continue;
+                        }
+                    };
+                    let build_info: serde_json::Value = match response.json().await {
+                        Ok(build_info) => build_info,
+                        Err(error) => {
+                            status_failures += 1;
+                            if status_failures == 1 || status_failures.is_multiple_of(5) {
+                                terminal::print_line(
+                                    format!("Invalid build status response; retrying: {}", error).yellow(),
+                                );
+                            }
+                            self.wait_for_retry_or_cancel(event_receiver, 1000).await?;
+                            continue;
+                        }
+                    };
+                    let Some(building) = build_info["building"].as_bool() else {
+                        status_failures += 1;
+                        if status_failures == 1 || status_failures.is_multiple_of(5) {
+                            terminal::print_line("Build status incomplete; retrying".yellow());
+                        }
+                        self.wait_for_retry_or_cancel(event_receiver, 1000).await?;
+                        continue;
+                    };
+                    status_failures = 0;
 
                     // Retrieve and print the incremental part of Jenkins console log
                     match self.get_jenkins_progressive_html(build_url, last_log_offset).await {
@@ -1081,20 +1150,30 @@ impl JenkinsClient {
                             }
                         }
                         Err(e) => {
-                            if let Some(sp) = spinner.as_ref() {
-                                sp.suspend(|| {
-                                  println!("Failed to retrieve console log: {}", e);
-                                });
-                            } else {
-                                println!("Failed to retrieve console log: {}", e);
+                            console_failures += 1;
+                            if console_failures == 1 || console_failures.is_multiple_of(5) {
+                                if let Some(sp) = spinner.as_ref() {
+                                    sp.suspend(|| {
+                                        println!("Console log unavailable; retrying: {}", e);
+                                    });
+                                } else {
+                                    println!("Console log unavailable; retrying: {}", e);
+                                }
                             }
                         }
                     }
 
-                    if build_info["building"].as_bool().unwrap_or(false) {
+                    if building {
                         delay((1000.0 * 0.5) as u64).await;
                     } else {
-                        let result = build_info["result"].as_str().unwrap_or("UNKNOWN"); // or inProgress
+                        let Some(result) = build_info["result"].as_str() else {
+                            status_failures += 1;
+                            if status_failures == 1 || status_failures.is_multiple_of(5) {
+                                terminal::print_line("Build result incomplete; retrying".yellow());
+                            }
+                            self.wait_for_retry_or_cancel(event_receiver, 1000).await?;
+                            continue;
+                        };
                         finish_terminal_line();
                         let build_result = if result == "SUCCESS" {
                             if let Some(sp) = spinner.take() {

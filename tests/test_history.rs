@@ -213,6 +213,47 @@ fn test_apply_history_defaults() {
 }
 
 #[test]
+fn test_merge_parameters_refreshes_types_from_current_definitions() {
+    let history_entry = HistoryEntry {
+        params: Some(HashMap::from([
+            (
+                "ENV".to_string(),
+                ParamInfo {
+                    value: "old".to_string(),
+                    r#type: ParamType::String,
+                },
+            ),
+            (
+                "TOKEN".to_string(),
+                ParamInfo {
+                    value: "<DEFAULT>".to_string(),
+                    r#type: ParamType::Password,
+                },
+            ),
+        ])),
+        ..Default::default()
+    };
+
+    let current_parameters = vec![
+        JenkinsJobParameter {
+            name: "ENV".to_string(),
+            param_type: Some(ParamType::Choice),
+            choices: Some(vec!["old".to_string(), "new".to_string()]),
+            ..Default::default()
+        },
+        JenkinsJobParameter {
+            name: "TOKEN".to_string(),
+            param_type: Some(ParamType::Password),
+            ..Default::default()
+        },
+    ];
+
+    let merged = History::merge_parameters(&history_entry, &current_parameters);
+    assert_eq!(merged["ENV"].r#type, ParamType::Choice);
+    assert_eq!(merged["TOKEN"].r#type, ParamType::Password);
+}
+
+#[test]
 fn test_history_toml_round_trip_preserves_special_values() {
     let (mut history, _temp_dir) = setup_test_history();
     let mut params = HashMap::new();

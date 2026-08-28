@@ -2,6 +2,7 @@ use jenkins::constants::ParamType;
 use jenkins::jenkins::presets::*;
 use jenkins::jenkins::ParamInfo;
 use std::collections::HashMap;
+use std::fs;
 use tempfile::tempdir;
 
 const SERVICE_URL: &str = "http://example.com";
@@ -13,7 +14,7 @@ fn setup_store() -> (PresetStore, tempfile::TempDir) {
     let store = PresetStore {
         jobs: vec![],
         file_path,
-        version: Some(1),
+        version: Some(2),
     };
     (store, temp_dir)
 }
@@ -60,6 +61,13 @@ fn special_params() -> HashMap<String, ParamInfo> {
             ParamInfo {
                 value: "uat".to_string(),
                 r#type: ParamType::Choice,
+            },
+        ),
+        (
+            "token".to_string(),
+            ParamInfo {
+                value: "<DEFAULT>".to_string(),
+                r#type: ParamType::Password,
             },
         ),
     ])
@@ -141,6 +149,90 @@ fn persists_preset_names_and_params_with_spaces_and_special_chars() {
     assert_eq!(preset.name, preset_name);
     assert_eq!(preset.params["branch name"].value, "feature/space name");
     assert_eq!(preset.params["deploy.env"].value, "uat");
+}
+
+#[test]
+fn serializes_parameters_as_compact_editable_maps() {
+    let (mut store, _temp_dir) = setup_store();
+    let id = identity(JOB_URL, "frontend");
+
+    store.upsert_preset(&id, "release-main", params("main")).unwrap();
+    let content = fs::read_to_string(&store.file_path).unwrap();
+
+    assert!(content.contains("[jobs.presets.params]\n"));
+    assert!(content.contains("BRANCH = \"main\""));
+    assert!(content.contains("ENV = \"sit\""));
+    assert!(!content.contains("[jobs.presets.params."));
+}
+
+#[test]
+fn serializes_non_string_parameter_types_separately() {
+    let (mut store, _temp_dir) = setup_store();
+    let id = identity(JOB_URL, "frontend");
+
+    store.upsert_preset(&id, "release-main", special_params()).unwrap();
+    let content = fs::read_to_string(&store.file_path).unwrap();
+
+    assert!(content.contains("[jobs.presets.params]\n"));
+    assert!(content.contains("\"branch name\" = \"feature/space name\""));
+    assert!(content.contains("\"deploy.env\" = \"uat\""));
+    assert!(content.contains("[jobs.presets.param_types]\n"));
+    assert!(!content.contains("deploy.env\" = \"choice\""));
+    assert!(content.contains("token = \"password\""));
+
+    let mut loaded = PresetStore {
+        jobs: vec![],
+        file_path: store.file_path.clone(),
+        version: None,
+    };
+    loaded.load_presets().unwrap();
+    let preset = loaded.find_preset(&id, "release-main").unwrap();
+    assert_eq!(preset.params["deploy.env"].r#type, ParamType::String);
+    assert_eq!(preset.params["token"].r#type, ParamType::Password);
+}
+
+#[test]
+fn loads_legacy_nested_parameter_tables() {
+    let (store, _temp_dir) = setup_store();
+    fs::write(
+        &store.file_path,
+        r#"
+version = 1
+
+[[jobs]]
+service_url = "http://example.com"
+job_url = "http://example.com/job/frontend"
+job_name = "frontend"
+
+[[jobs.presets]]
+name = "legacy"
+
+[jobs.presets.params.BRANCH]
+value = "main"
+type = "string"
+
+[jobs.presets.params.ENV]
+value = "sit"
+type = "choice"
+"#,
+    )
+    .unwrap();
+
+    let mut loaded = PresetStore {
+        jobs: vec![],
+        file_path: store.file_path.clone(),
+        version: None,
+    };
+    loaded.load_presets().unwrap();
+    let preset = loaded.find_preset(&identity(JOB_URL, "frontend"), "legacy").unwrap();
+    assert_eq!(preset.params["BRANCH"].value, "main");
+    assert_eq!(preset.params["ENV"].r#type, ParamType::Choice);
+
+    loaded.save_presets().unwrap();
+    let migrated = fs::read_to_string(&loaded.file_path).unwrap();
+    assert!(migrated.starts_with("version = 2\n"));
+    assert!(migrated.contains("[jobs.presets.params]\n"));
+    assert!(!migrated.contains("[jobs.presets.params.BRANCH]"));
 }
 
 #[test]

@@ -351,6 +351,11 @@ impl History {
 
         // add new parameters (use default value)
         for param in current_parameters {
+            if let Some(param_info) = merged_params.get_mut(&param.name) {
+                if let Some(param_type) = &param.param_type {
+                    param_info.r#type = param_type.clone();
+                }
+            }
             if !merged_params.contains_key(&param.name) {
                 if let Some(default_value) = &param.default_value {
                     merged_params.insert(

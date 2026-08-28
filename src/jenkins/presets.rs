@@ -3,7 +3,7 @@ use chrono::{DateTime, Local};
 use colored::Colorize;
 use dialoguer::{theme::ColorfulTheme, FuzzySelect};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::PathBuf;
@@ -16,7 +16,7 @@ use crate::prompt;
 use crate::utils::{self, current_timestamp};
 
 pub const PRESETS_FILE: &str = "presets.toml";
-const CURRENT_PRESETS_VERSION: u32 = 1;
+const CURRENT_PRESETS_VERSION: u32 = 2;
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct PresetStore {
@@ -39,15 +39,108 @@ pub struct JobPresets {
     pub presets: Vec<ParameterPreset>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct ParameterPreset {
     pub name: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     pub params: HashMap<String, ParamInfo>,
     pub created_at: Option<i64>,
     pub updated_at: Option<i64>,
     pub last_used_at: Option<i64>,
+}
+
+// Presets are stored as compact value and type tables for easy manual editing.
+// Only password types need to be persisted; Jenkins supplies the other type
+// information when the job is loaded. The legacy nested `{ value, type }` map
+// remains accepted when reading existing files.
+#[derive(Serialize)]
+struct ParameterPresetFile {
+    name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    params: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    param_types: BTreeMap<String, ParamType>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    created_at: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    updated_at: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    last_used_at: Option<i64>,
+}
+
+impl Serialize for ParameterPreset {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut params = BTreeMap::new();
+        let mut param_types = BTreeMap::new();
+        for (name, info) in &self.params {
+            params.insert(name.clone(), info.value.clone());
+            if info.r#type == ParamType::Password {
+                param_types.insert(name.clone(), info.r#type.clone());
+            }
+        }
+
+        ParameterPresetFile {
+            name: self.name.clone(),
+            description: self.description.clone(),
+            params,
+            param_types,
+            created_at: self.created_at,
+            updated_at: self.updated_at,
+            last_used_at: self.last_used_at,
+        }
+        .serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for ParameterPreset {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct ParameterPresetFile {
+            name: String,
+            #[serde(default)]
+            description: Option<String>,
+            #[serde(default)]
+            params: HashMap<String, toml::Value>,
+            #[serde(default)]
+            param_types: HashMap<String, ParamType>,
+            #[serde(default)]
+            created_at: Option<i64>,
+            #[serde(default)]
+            updated_at: Option<i64>,
+            #[serde(default)]
+            last_used_at: Option<i64>,
+        }
+
+        let file = ParameterPresetFile::deserialize(deserializer)?;
+        let mut params = HashMap::with_capacity(file.params.len());
+        for (name, value) in file.params {
+            let info = match value {
+                toml::Value::String(value) => ParamInfo {
+                    value,
+                    r#type: file.param_types.get(&name).cloned().unwrap_or(ParamType::String),
+                },
+                value => value.try_into().map_err(serde::de::Error::custom)?,
+            };
+            params.insert(name, info);
+        }
+
+        Ok(Self {
+            name: file.name,
+            description: file.description,
+            params,
+            created_at: file.created_at,
+            updated_at: file.updated_at,
+            last_used_at: file.last_used_at,
+        })
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -133,7 +226,9 @@ impl PresetStore {
         match toml::from_str::<PresetStore>(content.trim()) {
             Ok(file_store) => {
                 self.jobs = file_store.jobs;
-                self.version = file_store.version.or(Some(CURRENT_PRESETS_VERSION));
+                // Reading an older representation is supported; saving it
+                // upgrades the file to the current compact representation.
+                self.version = Some(CURRENT_PRESETS_VERSION);
                 Ok(())
             }
             Err(_) => {
