@@ -2,6 +2,8 @@
 
 Cross-platform CLI tool for triggering Jenkins builds. Written in Rust for high performance.
 
+[![GitHub stars](https://img.shields.io/github/stars/kairyou/jenkins-cli?style=flat-square&logo=github&label=Stars)](https://github.com/kairyou/jenkins-cli/stargazers)
+
 [中文文档](README_zh.md)
 
 ## Features
@@ -227,10 +229,6 @@ Note: Keep your API token secure. Do not share it or commit it to version contro
 - [x] Follow downstream Jenkins builds
 - [x] i18n support (fluent)
 - [x] Automatically check for updates
-
-## Stars
-
-[![GitHub stars](https://img.shields.io/github/stars/kairyou/jenkins-cli?style=flat-square&logo=github&label=Stars)](https://github.com/kairyou/jenkins-cli/stargazers)
 
 ## License
 
