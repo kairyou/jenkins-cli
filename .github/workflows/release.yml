@@ -381,12 +381,20 @@ jobs:
       - name: Create annotated release tag
         if: ${{ needs.prepare-release.outputs.formal == 'true' }}
         env:
-          GH_TOKEN: ${{ github.token }}
+          # Use the dedicated release identity for Git data API writes. The
+          # repository GITHUB_TOKEN can return 404 for these operations.
+          GH_TOKEN: ${{ secrets.RELEASE_PR_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TOKEN: ${{ secrets.RELEASE_PR_TOKEN }}
           RELEASE_SHA: ${{ needs.prepare-release.outputs.release_sha }}
           RELEASE_TAG: ${{ needs.prepare-release.outputs.release_tag }}
           VERSION: ${{ needs.prepare-release.outputs.version }}
         run: |
           set -euo pipefail
+          test -n "${RELEASE_TOKEN}" || {
+            echo "RELEASE_PR_TOKEN secret is not configured" >&2
+            exit 1
+          }
 
           existing="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" --jq '.object.sha' 2>/dev/null || true)"
           if [ -n "${existing}" ]; then
