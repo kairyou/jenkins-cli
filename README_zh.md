@@ -4,7 +4,7 @@
 
 [![GitHub stars](https://img.shields.io/github/stars/kairyou/jenkins-cli?style=flat-square&logo=github&label=Stars)](https://github.com/kairyou/jenkins-cli/stargazers)
 
-[English](README.md) | 中文
+[English](README.md) | [中文](README_zh.md)
 
 ## 特性
 
