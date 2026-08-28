@@ -2,6 +2,8 @@
 
 跨平台的Jenkins构建触发工具，采用Rust开发以提供卓越性能。
 
+[![GitHub stars](https://img.shields.io/github/stars/kairyou/jenkins-cli?style=flat-square&logo=github&label=Stars)](https://github.com/kairyou/jenkins-cli/stargazers)
+
 [English](README.md)
 
 ## 特性
@@ -227,10 +229,6 @@ Jenkins User ID 就是登录 Jenkins 网页界面的用户名。
 - [x] 跟踪下游 Jenkins 构建
 - [x] i18n 支持 (fluent)
 - [x] 自动检查更新
-
-## Star 趋势
-
-[![Stargazers over time](https://starchart.cc/kairyou/jenkins-cli.svg?variant=adaptive)](https://starchart.cc/kairyou/jenkins-cli)
 
 ## 许可证
 
