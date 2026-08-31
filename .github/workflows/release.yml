@@ -145,7 +145,7 @@ jobs:
       - name: Checkout release commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.prepare-release.outputs.release_sha }}
+          ref: ${{ github.sha }}
           persist-credentials: false
       - name: Read Rust toolchain
         id: rust-toolchain
@@ -183,7 +183,7 @@ jobs:
       - name: Checkout release commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.prepare-release.outputs.release_sha }}
+          ref: ${{ github.sha }}
           persist-credentials: false
       - name: Read Rust toolchain
         id: rust-toolchain
@@ -216,7 +216,7 @@ jobs:
       - name: Checkout release commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.prepare-release.outputs.release_sha }}
+          ref: ${{ github.sha }}
           persist-credentials: false
       - name: Read Rust toolchain
         id: rust-toolchain
@@ -257,7 +257,7 @@ jobs:
       - name: Checkout release commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.prepare-release.outputs.release_sha }}
+          ref: ${{ github.sha }}
           persist-credentials: false
 
       - name: Read Rust toolchain
@@ -501,7 +501,7 @@ jobs:
       - name: Checkout release commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.prepare-release.outputs.release_sha || github.sha }}
+          ref: ${{ github.sha }}
           persist-credentials: false
       - name: Download artifacts (workflow)
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode != 'edgeone_release' }}
