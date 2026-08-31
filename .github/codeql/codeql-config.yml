@@ -1,0 +1,5 @@
+name: jenkins-cli-codeql
+
+query-filters:
+  - exclude:
+      id: rust/disabled-certificate-check
