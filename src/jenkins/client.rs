@@ -597,7 +597,9 @@ impl JenkinsClient {
         // println!("Authorization: {}", authorization);
         // std::env::set_var("NO_PROXY", "jenkins.example.com,other.example.com"); // Bypass proxy
         let client = reqwest::Client::builder()
-            .danger_accept_invalid_certs(true) // Ignore SSL verification
+            // Internal Jenkins instances commonly use self-signed certificates.
+            // This CLI prioritizes connectivity for those trusted deployments.
+            .danger_accept_invalid_certs(true)
             .no_proxy() // Ignore proxy to avoid potential DNS resolution failure
             .timeout(std::time::Duration::from_secs(timeout_secs))
             .user_agent("Jenkins CLI")

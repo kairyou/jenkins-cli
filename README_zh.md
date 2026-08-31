@@ -43,6 +43,8 @@ cargo install jenkins
 
 或者，可以从 [Releases 页面](https://github.com/kairyou/jenkins-cli/releases) 下载二进制文件。
 
+本工具主要面向内网 Jenkins，内网环境中自签名证书较为常见。为了保证这些地址可以正常使用，默认会关闭 TLS 证书校验。请仅连接你信任的 Jenkins 服务，不建议用于不可信的公网地址。
+
 ## 使用
 
 在设置好配置文件（见[配置](#配置)部分）后，可以直接运行：

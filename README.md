@@ -43,6 +43,11 @@ cargo install jenkins
 
 Alternatively, you can download the binary file from the [Releases page](https://github.com/kairyou/jenkins-cli/releases).
 
+This tool is primarily intended for internal Jenkins deployments, where
+self-signed certificates are common. TLS certificate verification is disabled
+by default to keep those endpoints usable. Only connect to Jenkins servers you
+trust; this is not recommended for untrusted public endpoints.
+
 ## Usage
 
 After setting up the configuration file (see [Configuration](#configuration) section), you can simply run:
