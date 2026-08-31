@@ -12,12 +12,6 @@ on:
           - patch
           - minor
           - major
-      auto_merge:
-        description: "Enable auto-merge after required checks pass"
-        type: boolean
-        required: true
-        default: false
-
 permissions:
   contents: write
   pull-requests: write
@@ -144,7 +138,6 @@ jobs:
           echo "Created ${url}"
 
       - name: Enable auto-merge
-        if: ${{ inputs.auto_merge }}
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PR_TOKEN }}
           PR_URL: ${{ steps.pull-request.outputs.url }}

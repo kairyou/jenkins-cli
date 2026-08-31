@@ -1,11 +1,12 @@
 name: Release
 
 on:
-  push:
-    branches:
-      - main
-    tags:
-      - "v*"
+  pull_request:
+    types: [closed]
+    branches: [main]
+    paths:
+      - Cargo.toml
+      - Cargo.lock
   workflow_dispatch:
     inputs:
       mode:
@@ -16,18 +17,21 @@ on:
         options:
           - edgeone_release
           - prerelease
-          - repair_v0_1_31
 
 permissions:
   contents: read
-  pull-requests: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: false
 
 jobs:
   prepare-release:
+    if: >-
+      github.event_name != 'pull_request' ||
+      (github.event.pull_request.merged == true &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      startsWith(github.event.pull_request.head.ref, 'release/v'))
     runs-on: ubuntu-latest
     outputs:
       build: ${{ steps.release.outputs.build }}
@@ -47,11 +51,10 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           INPUT_MODE: ${{ inputs.mode }}
-          REF_NAME: ${{ github.ref_name }}
-          REF_TYPE: ${{ github.ref_type }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
           RELEASE_SHA: ${{ github.sha }}
-          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_BRANCH: ${{ github.event.pull_request.head.ref }}
+          RELEASE_TITLE: ${{ github.event.pull_request.title }}
         run: |
           set -euo pipefail
 
@@ -69,79 +72,24 @@ jobs:
               exit 0
             fi
 
-            if [ "${INPUT_MODE}" = "repair_v0_1_31" ]; then
-              repair_tag="v0.1.31"
-              release_sha="$(git rev-parse "${repair_tag}^{commit}")"
-              git checkout --detach "${release_sha}"
-              version="$(cargo metadata --locked --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "jenkins") | .version')"
-              if [ "${repair_tag}" != "v${version}" ]; then
-                echo "${repair_tag} contains Cargo version ${version}." >&2
-                exit 1
-              fi
-
-              status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
-                --header 'User-Agent: jenkins-cli-release (github.com/kairyou/jenkins-cli)' \
-                "https://crates.io/api/v1/crates/jenkins/${version}")"
-              case "${status}" in
-                200) publish=false ;;
-                404) publish=true ;;
-                *) echo "crates.io returned HTTP ${status}" >&2; exit 1 ;;
-              esac
-
-              echo "build=true" >> "$GITHUB_OUTPUT"
-              echo "formal=true" >> "$GITHUB_OUTPUT"
-              echo "publish=${publish}" >> "$GITHUB_OUTPUT"
-              echo "release_sha=${release_sha}" >> "$GITHUB_OUTPUT"
-              echo "release_tag=${repair_tag}" >> "$GITHUB_OUTPUT"
-              echo "version=${version}" >> "$GITHUB_OUTPUT"
-              echo "Repairing ${repair_tag} from ${release_sha} (publish=${publish})."
-              exit 0
-            fi
-
             exit 0
           fi
 
-          if [ "${REF_TYPE}" = "tag" ]; then
-            echo "build=true" >> "$GITHUB_OUTPUT"
-            echo "release_tag=${REF_NAME}" >> "$GITHUB_OUTPUT"
-            echo "version=${REF_NAME#v}" >> "$GITHUB_OUTPUT"
-            exit 0
+          if [ "${EVENT_NAME}" != "pull_request" ]; then
+            echo "Unsupported release event: ${EVENT_NAME}" >&2
+            exit 1
           fi
 
-          # A push to main is only a formal-release trigger when its commit is
-          # associated with a merged release PR created from this repository.
-          # Ordinary contributor PRs and direct pushes stop here, even if they
-          # accidentally edit Cargo.toml's version.
-          pull_requests="$(GH_TOKEN="${GITHUB_TOKEN}" gh api \
-            --header 'Accept: application/vnd.github+json' \
-            "repos/${GITHUB_REPOSITORY}/commits/${RELEASE_SHA}/pulls")"
-          release_pr="$(jq -r --arg repository "${GITHUB_REPOSITORY}" '
-            [.[] | select(
-              .merged_at != null and
-              .base.ref == "main" and
-              .head.repo.full_name == $repository and
-              (.head.ref | startswith("release/v"))
-            )] |
-            first |
-            if . == null then empty else [.head.ref, .title] | @tsv end
-          ' <<< "${pull_requests}")"
-
-          if [ -z "${release_pr}" ]; then
-            echo "${RELEASE_SHA} is not the result of an in-repository release PR; skipping."
-            exit 0
-          fi
-
-          release_branch="${release_pr%%$'\t'*}"
-          release_title="${release_pr#*$'\t'}"
+          git checkout --detach "${RELEASE_SHA}"
           version="$(cargo metadata --locked --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "jenkins") | .version')"
           tag="v${version}"
           expected_branch="release/${tag}"
           expected_title="chore: release ${tag}"
 
-          if [ "${release_branch}" != "${expected_branch}" ] || [ "${release_title}" != "${expected_title}" ]; then
+          if [ "${RELEASE_BRANCH}" != "${expected_branch}" ] || [ "${RELEASE_TITLE}" != "${expected_title}" ]; then
             echo "Release PR identity does not match Cargo version ${version}." >&2
             echo "Expected branch/title: ${expected_branch} / ${expected_title}" >&2
-            echo "Actual branch/title:   ${release_branch} / ${release_title}" >&2
+            echo "Actual branch/title:   ${RELEASE_BRANCH} / ${RELEASE_TITLE}" >&2
             exit 1
           fi
 
@@ -195,16 +143,9 @@ jobs:
           - aarch64-unknown-linux-musl # ARM64 Linux (musl)
     steps:
       - name: Checkout release commit
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode != 'repair_v0_1_31' }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-      - name: Checkout v0.1.31 repair commit
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'repair_v0_1_31' }}
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: v0.1.31
+          ref: ${{ needs.prepare-release.outputs.release_sha }}
           persist-credentials: false
       - name: Read Rust toolchain
         id: rust-toolchain
@@ -240,16 +181,9 @@ jobs:
           - x86_64-pc-windows-msvc # Windows (MSVC)
     steps:
       - name: Checkout release commit
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode != 'repair_v0_1_31' }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-      - name: Checkout v0.1.31 repair commit
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'repair_v0_1_31' }}
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: v0.1.31
+          ref: ${{ needs.prepare-release.outputs.release_sha }}
           persist-credentials: false
       - name: Read Rust toolchain
         id: rust-toolchain
@@ -280,16 +214,9 @@ jobs:
           - aarch64-apple-darwin # M1/M2 Mac
     steps:
       - name: Checkout release commit
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode != 'repair_v0_1_31' }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-      - name: Checkout v0.1.31 repair commit
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'repair_v0_1_31' }}
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: v0.1.31
+          ref: ${{ needs.prepare-release.outputs.release_sha }}
           persist-credentials: false
       - name: Read Rust toolchain
         id: rust-toolchain
@@ -328,16 +255,9 @@ jobs:
       contents: write
     steps:
       - name: Checkout release commit
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode != 'repair_v0_1_31' }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-      - name: Checkout v0.1.31 repair commit
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'repair_v0_1_31' }}
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: v0.1.31
+          ref: ${{ needs.prepare-release.outputs.release_sha }}
           persist-credentials: false
 
       - name: Read Rust toolchain
@@ -575,23 +495,16 @@ jobs:
 
   deploy-edgeone:
     needs: [prepare-release, create-release]
-    if: ${{ always() && ((github.event_name == 'workflow_dispatch' && inputs.mode == 'edgeone_release') || ((github.event_name != 'workflow_dispatch' || inputs.mode == 'repair_v0_1_31') && needs.create-release.result == 'success')) }}
+    if: ${{ always() && ((github.event_name == 'workflow_dispatch' && inputs.mode == 'edgeone_release') || needs.create-release.result == 'success') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout release commit
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode != 'repair_v0_1_31' }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-      - name: Checkout v0.1.31 repair commit
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'repair_v0_1_31' }}
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: v0.1.31
+          ref: ${{ needs.prepare-release.outputs.release_sha || github.sha }}
           persist-credentials: false
       - name: Download artifacts (workflow)
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'repair_v0_1_31' }}
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode != 'edgeone_release' }}
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: artifacts

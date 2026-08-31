@@ -120,20 +120,19 @@ cargo clippy --all-targets --all-features -- -D warnings # --fix --allow-dirty
 # cargo login
 # cargo publish
 
-# Release: create a release PR; merging it publishes crates.io, tag and binaries.
+# Release a patch version: create and auto-merge a release PR after CI passes;
+# merging it publishes crates.io, tag and binaries.
 # Configure these repository secrets first:
 # - RELEASE_PR_TOKEN: fine-grained PAT scoped to this repository with Contents
 #   and Pull requests read/write access, used to create the release PR and tag.
 # - CARGO_REGISTRY_TOKEN: crates.io API token for publishing.
 # - EDGEONE_API_TOKEN: EdgeOne API token for deployment.
-# For auto_merge=true, enable Settings > General > Pull Requests > Allow auto-merge.
-gh workflow run prepare-release.yml -f bump=patch
+# Enable Settings > General > Pull Requests > Allow auto-merge.
+gh workflow run prepare-release.yml
 
-# Optional: merge automatically after required checks and reviews pass.
-gh workflow run prepare-release.yml -f bump=patch -f auto_merge=true
-
-# Repair an incomplete existing release (do not publish or create v* tags locally).
-gh workflow run release.yml -f mode=repair_v0_1_31
+# Minor or major release:
+# gh workflow run prepare-release.yml -f bump=minor
+# gh workflow run prepare-release.yml -f bump=major
 ```
 
 ### Test

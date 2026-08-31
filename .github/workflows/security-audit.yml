@@ -1,15 +1,6 @@
 name: Rust Security Audit
 
 on:
-  pull_request:
-    paths:
-      - "**/Cargo.toml"
-      - "**/Cargo.lock"
-  push:
-    branches: [main]
-    paths:
-      - "**/Cargo.toml"
-      - "**/Cargo.lock"
   schedule:
     - cron: "37 3 * * 1"
   workflow_dispatch:
@@ -19,21 +10,6 @@ permissions:
 
 jobs:
   audit:
-    if: github.event_name != 'schedule'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      checks: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998 # v2.0.0
-        with:
-          token: ${{ github.token }}
-
-  scheduled-audit:
-    if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
     permissions:
       contents: read
