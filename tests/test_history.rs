@@ -300,10 +300,14 @@ fn test_migrate_history_v0_yaml() {
   name: "Job1"
   display_name: "Test Job 1"
   created_at: 1000
+  completed_at: 2000
   user_params:
     IS_DEBUG: "true"
     APP_ENV: sit
     GIT_BRANCH: main
+    SWITCH: on
+    ANSWER: no
+    BUILD_NUMBER: "00123"
 "#;
     fs::write(&yaml_path, yaml_content).unwrap();
 
@@ -328,11 +332,31 @@ fn test_migrate_history_v0_yaml() {
     println!("test_migrate params: {:?}", entry.params);
     assert_eq!(entry.name, "Job1");
     assert_eq!(entry.job_url, format!("{}/job1", BASE_URL));
+    assert_eq!(entry.created_at, Some(1000));
+    assert_eq!(entry.completed_at, Some(2000));
 
     let params = entry.params.as_ref().unwrap();
-    assert_eq!(params.len(), 3); // params length
+    assert_eq!(params.len(), 6); // params length
+    assert_eq!(params["IS_DEBUG"].value, "true");
+    assert_eq!(params["SWITCH"].value, "on");
+    assert_eq!(params["ANSWER"].value, "no");
+    assert_eq!(params["BUILD_NUMBER"].value, "00123");
 
     let git_branch = params.get("GIT_BRANCH").unwrap();
     assert_eq!(git_branch.value, "main");
     assert_eq!(git_branch.r#type, ParamType::String);
+}
+
+#[test]
+fn test_invalid_yaml_history_keeps_original_file() {
+    for content in ["- name: [unfinished", "- name: first\n  name: duplicate\n"] {
+        let temp_dir = tempdir().unwrap();
+        let yaml_path = temp_dir.path().join("history.yaml");
+        let toml_path = yaml_path.with_extension("toml");
+        fs::write(&yaml_path, content).unwrap();
+
+        assert!(migrate_history_yaml_to_toml(&yaml_path, &toml_path).is_err());
+        assert_eq!(fs::read_to_string(&yaml_path).unwrap(), content);
+        assert!(!toml_path.exists());
+    }
 }

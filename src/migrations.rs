@@ -4,15 +4,24 @@ use crate::i18n::macros::t;
 use crate::jenkins::history::HISTORY_FILE;
 use anyhow::{Context, Result};
 use dirs::home_dir;
+use indexmap::IndexMap;
 use serde_json::json;
 use serde_json::Value as JsonValue;
-use serde_yaml::Value as YamlValue;
 use std::collections::HashMap;
 use std::fs;
 use std::io::Read;
 use std::path::PathBuf;
 
 pub const CURRENT_HISTORY_VERSION: u32 = 1; // latest version
+
+fn parse_legacy_yaml<T: serde::de::DeserializeOwned>(content: &str) -> Result<T> {
+    // Match serde_yaml's scalar and merge-key handling for existing files.
+    let options = serde_saphyr::options! {
+        strict_booleans: true,
+        merge_keys: serde_saphyr::MergeKeyPolicy::AsOrdinary,
+    };
+    Ok(serde_saphyr::from_str_with_options(content, options)?)
+}
 
 /// Migrate config from yaml to toml
 pub fn migrate_config_yaml_to_toml(config_path: &PathBuf) -> Result<()> {
@@ -25,44 +34,38 @@ pub fn migrate_config_yaml_to_toml(config_path: &PathBuf) -> Result<()> {
     }
 
     let yml_content = fs::read_to_string(&yaml_path)?;
-    let yaml_value: YamlValue = serde_yaml::from_str(&yml_content)?;
+    let configs: Vec<IndexMap<String, JsonValue>> = parse_legacy_yaml(&yml_content)?;
 
     // let config = json!({ "jenkins": configs });
     // let toml_content = format!("[config]\n# locale = \"en-US\"\n\n{}", toml::to_string_pretty(&config)?);
 
     let mut toml_content = String::from("[config]\n# locale = \"en-US\"\n\n");
-    if let YamlValue::Sequence(configs) = yaml_value {
-        for config in configs {
-            toml_content.push_str("[[jenkins]]\n");
-            // keep the order of the keys
-            if let YamlValue::Mapping(map) = config {
-                for (key, value) in map {
-                    if let Some(key_str) = key.as_str() {
-                        match value {
-                            YamlValue::String(s) => {
-                                let escaped = s.replace("\\", "\\\\").replace("\"", "\\\"");
-                                toml_content.push_str(&format!("{} = \"{}\"\n", key_str, escaped));
-                            }
-                            YamlValue::Sequence(seq) => {
-                                toml_content.push_str(&format!("{} = [", key_str));
-                                for (i, item) in seq.iter().enumerate() {
-                                    if i > 0 {
-                                        toml_content.push_str(", ");
-                                    }
-                                    if let Some(s) = item.as_str() {
-                                        let escaped = s.replace("\\", "\\\\").replace("\"", "\\\"");
-                                        toml_content.push_str(&format!("\"{}\"", escaped));
-                                    }
-                                }
-                                toml_content.push_str("]\n");
-                            }
-                            _ => {}
+    for config in configs {
+        toml_content.push_str("[[jenkins]]\n");
+        // IndexMap retains the original YAML field order.
+        for (key, value) in config {
+            match value {
+                JsonValue::String(s) => {
+                    let escaped = s.replace("\\", "\\\\").replace("\"", "\\\"");
+                    toml_content.push_str(&format!("{} = \"{}\"\n", key, escaped));
+                }
+                JsonValue::Array(seq) => {
+                    toml_content.push_str(&format!("{} = [", key));
+                    for (i, item) in seq.iter().enumerate() {
+                        if i > 0 {
+                            toml_content.push_str(", ");
+                        }
+                        if let Some(s) = item.as_str() {
+                            let escaped = s.replace("\\", "\\\\").replace("\"", "\\\"");
+                            toml_content.push_str(&format!("\"{}\"", escaped));
                         }
                     }
+                    toml_content.push_str("]\n");
                 }
+                _ => {}
             }
-            toml_content.push('\n');
         }
+        toml_content.push('\n');
     }
 
     // println!("migrate_config_yaml_to_toml:\n{}", toml_content);
@@ -77,7 +80,7 @@ pub fn migrate_history_yaml_to_toml(yaml_path: &PathBuf, toml_path: &PathBuf) ->
     if yaml_path.exists() {
         let yaml_content = fs::read_to_string(yaml_path)?;
         // HistoryItem: job_url/name/display_name/user_params(key=value)/created_at/completed_at
-        let yaml_entries: Vec<YamlValue> = serde_yaml::from_str(&yaml_content)?;
+        let yaml_entries: Vec<JsonValue> = parse_legacy_yaml(&yaml_content)?;
 
         let entries: Vec<JsonValue> = yaml_entries
             .into_iter()
@@ -100,10 +103,10 @@ pub fn migrate_history_yaml_to_toml(yaml_path: &PathBuf, toml_path: &PathBuf) ->
                     json_entry.insert("completed_at".to_string(), JsonValue::Number(completed_at.into()));
                 }
                 // println!("entry: {:?}", entry);
-                if let Some(user_params) = entry["user_params"].as_mapping() {
+                if let Some(user_params) = entry["user_params"].as_object() {
                     let params: HashMap<String, String> = user_params
                         .iter()
-                        .filter_map(|(k, v)| Some((k.as_str()?.to_string(), v.as_str()?.to_string())))
+                        .filter_map(|(k, v)| Some((k.clone(), v.as_str()?.to_string())))
                         .collect();
                     json_entry.insert(
                         "params".to_string(),
