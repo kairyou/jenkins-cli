@@ -7,8 +7,8 @@
 bash <(curl -fsSL https://moonrepo.dev/install/proto.sh)
 # install rust
 proto install rust
-# install cross
-cargo install cross
+# Optional: install cross only when building for another target locally.
+# cargo install cross
 
 # apt update -y && apt upgrade -y
 sudo apt install -y libssl-dev pkg-config
