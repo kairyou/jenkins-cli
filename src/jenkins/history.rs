@@ -1,5 +1,4 @@
 use anyhow::{Context, Result};
-use chrono::{DateTime, Local};
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -223,12 +222,9 @@ impl History {
             .as_ref()
             .map_or(Some(HistoryParameterAction::Refill), |history| {
                 let params = history.params.as_ref().unwrap();
-                let datetime_str = history.created_at.map(|timestamp| {
-                    let utc_datetime = DateTime::from_timestamp(timestamp, 0).unwrap();
-                    // UTC => Local
-                    let local_datetime = utc_datetime.with_timezone(&Local);
-                    local_datetime.format("%Y-%m-%d %H:%M:%S").to_string()
-                });
+                let datetime_str = history
+                    .created_at
+                    .and_then(|timestamp| utils::format_local_timestamp(timestamp, "%Y-%m-%d %H:%M:%S"));
 
                 println!(
                     "{}{}:",

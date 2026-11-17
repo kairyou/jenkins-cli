@@ -137,6 +137,7 @@ fn persists_preset_names_and_params_with_spaces_and_special_chars() {
     let preset_name = "UAT 发布";
 
     store.upsert_preset(&id, preset_name, special_params()).unwrap();
+    let saved_preset = store.find_preset(&id, preset_name).unwrap();
 
     let mut loaded = PresetStore {
         jobs: vec![],
@@ -146,6 +147,9 @@ fn persists_preset_names_and_params_with_spaces_and_special_chars() {
     loaded.load_presets().unwrap();
 
     let preset = loaded.find_preset(&id, preset_name).unwrap();
+    assert_eq!(preset.created_at, saved_preset.created_at);
+    assert_eq!(preset.updated_at, saved_preset.updated_at);
+    assert_eq!(preset.last_used_at, saved_preset.last_used_at);
     assert_eq!(preset.name, preset_name);
     assert_eq!(preset.params["branch name"].value, "feature/space name");
     assert_eq!(preset.params["deploy.env"].value, "uat");
