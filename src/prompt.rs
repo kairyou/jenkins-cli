@@ -195,7 +195,7 @@ pub fn text_input(prompt_text: &str, default_value: &str) -> Option<String> {
 
         match editor.read_line(&prompt) {
             Ok(Signal::Success(value)) => Some(value),
-            Ok(Signal::CtrlC | Signal::CtrlD) => None,
+            Ok(Signal::CtrlC(_) | Signal::CtrlD) => None,
             Ok(Signal::ExternalBreak(_)) => None,
             Ok(_) => None,
             Err(_) => None,

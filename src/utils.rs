@@ -76,6 +76,18 @@ pub fn current_timestamp() -> i64 {
         .as_secs() as i64
 }
 
+/// Format Unix seconds in the system time zone, omitting out-of-range timestamps.
+pub(crate) fn format_local_timestamp(timestamp: i64, format: &str) -> Option<String> {
+    format_timestamp(timestamp, format, jiff::tz::TimeZone::system())
+}
+
+fn format_timestamp(timestamp: i64, format: &str, time_zone: jiff::tz::TimeZone) -> Option<String> {
+    let datetime = jiff::Timestamp::from_second(timestamp)
+        .ok()?
+        .to_zoned_datetime(time_zone);
+    Some(datetime.strftime(format).to_string())
+}
+
 /// delay `ms` milliseconds
 /// # Examples
 /// ```rust
@@ -229,5 +241,60 @@ pub fn get_current_branch() -> String {
         branch.trim().to_string()
     } else {
         String::new()
+    }
+}
+
+#[cfg(test)]
+mod timestamp_tests {
+    use super::format_timestamp;
+    use jiff::tz::{Offset, TimeZone};
+
+    #[test]
+    fn preserves_history_and_preset_formats() {
+        let zone = TimeZone::fixed(Offset::from_hours(8).unwrap());
+        assert_eq!(
+            format_timestamp(1_704_124_801, "%Y-%m-%d %H:%M:%S", zone.clone()).as_deref(),
+            Some("2024-01-02 00:00:01")
+        );
+        assert_eq!(
+            format_timestamp(1_704_124_801, "%Y-%m-%d %H:%M", zone).as_deref(),
+            Some("2024-01-02 00:00")
+        );
+    }
+
+    #[test]
+    fn handles_epoch_and_negative_timestamps() {
+        assert_eq!(
+            format_timestamp(0, "%Y-%m-%d %H:%M:%S", TimeZone::UTC).as_deref(),
+            Some("1970-01-01 00:00:00")
+        );
+        assert_eq!(
+            format_timestamp(-1, "%Y-%m-%d %H:%M:%S", TimeZone::UTC).as_deref(),
+            Some("1969-12-31 23:59:59")
+        );
+    }
+
+    #[test]
+    fn follows_daylight_saving_transitions() {
+        let zone = TimeZone::get("America/New_York").unwrap();
+        for (instant, expected) in [
+            ("2024-03-10T06:59:59Z", "2024-03-10 01:59:59"),
+            ("2024-03-10T07:00:00Z", "2024-03-10 03:00:00"),
+            ("2024-11-03T05:59:59Z", "2024-11-03 01:59:59"),
+            ("2024-11-03T06:00:00Z", "2024-11-03 01:00:00"),
+        ] {
+            let timestamp = instant.parse::<jiff::Timestamp>().unwrap().as_second();
+            assert_eq!(
+                format_timestamp(timestamp, "%Y-%m-%d %H:%M:%S", zone.clone()).as_deref(),
+                Some(expected)
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_out_of_range_timestamps() {
+        for timestamp in [i64::MIN, i64::MAX] {
+            assert_eq!(format_timestamp(timestamp, "%Y-%m-%d %H:%M:%S", TimeZone::UTC), None);
+        }
     }
 }

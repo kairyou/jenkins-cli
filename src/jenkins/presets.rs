@@ -1,5 +1,4 @@
 use anyhow::{Context, Result};
-use chrono::{DateTime, Local};
 use colored::Colorize;
 use dialoguer::{theme::ColorfulTheme, FuzzySelect};
 use serde::{Deserialize, Serialize};
@@ -796,9 +795,7 @@ fn format_preset_item(preset: &ParameterPreset) -> String {
 }
 
 fn format_preset_timestamp(timestamp: i64) -> String {
-    DateTime::from_timestamp(timestamp, 0)
-        .map(|utc| utc.with_timezone(&Local).format("%Y-%m-%d %H:%M").to_string())
-        .unwrap_or_else(|| "-".to_string())
+    utils::format_local_timestamp(timestamp, "%Y-%m-%d %H:%M").unwrap_or_else(|| "-".to_string())
 }
 
 fn prompt_unique_preset_name(store: &PresetStore, identity: &JobPresetIdentity) -> Option<String> {

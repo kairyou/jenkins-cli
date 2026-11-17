@@ -270,6 +270,7 @@ fn test_history_toml_round_trip_preserves_special_values() {
         name: "Job1".to_string(),
         display_name: Some("显示名 & 特殊值".to_string()),
         params: Some(params),
+        completed_at: Some(1_704_124_801),
         ..Default::default()
     };
     history.upsert_history(&mut entry).unwrap();
@@ -282,6 +283,8 @@ fn test_history_toml_round_trip_preserves_special_values() {
     loaded.load_history().unwrap();
 
     let loaded_entry = &loaded.entries[0];
+    assert_eq!(loaded_entry.created_at, entry.created_at);
+    assert_eq!(loaded_entry.completed_at, Some(1_704_124_801));
     assert_eq!(loaded_entry.display_name.as_deref(), Some("显示名 & 特殊值"));
     let loaded_param = &loaded_entry.params.as_ref().unwrap()["说明"];
     assert_eq!(loaded_param.value, "引号 \"、反斜杠 \\\\ 和换行\n第二行");
