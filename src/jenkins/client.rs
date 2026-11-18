@@ -81,6 +81,7 @@ pub struct JenkinsClient {
     cookie_refresh_attempted: AtomicBool,
     client: reqwest::Client,
     follow_downstream: bool,
+    active_build_url: std::sync::Mutex<Option<String>>,
     // shared states
     pub job_url: Option<String>, // e.g. http://jenkins_url/job/job_name
 }
@@ -614,6 +615,7 @@ impl JenkinsClient {
             cookie_refresh_attempted: AtomicBool::new(false),
             client,
             follow_downstream,
+            active_build_url: std::sync::Mutex::new(None),
             job_url: None,
         }
     }
@@ -947,17 +949,14 @@ impl JenkinsClient {
         queue_url: &str,
         event_receiver: &mut mpsc::Receiver<Event>,
     ) -> Result<String, anyhow::Error> {
+        *self.active_build_url.lock().unwrap_or_else(|error| error.into_inner()) = None;
         let api_url = format_url(&format!("{}/api/json", queue_url));
         let mut spinner = Some(spinner::Spinner::new(t!("polling-queue-item")));
-        let mut paused = false;
         let mut status_failures = 0u32;
 
         loop {
             tokio::select! {
                 _ = delay(2 * 1000) => {
-                    if paused {
-                        continue;
-                    }
                     let response = match self.get_with_refresh(&api_url).await {
                         Ok(response) => response,
                         Err(error) => {
@@ -998,17 +997,17 @@ impl JenkinsClient {
                 },
                 msg = event_receiver.recv() => {
                     match msg {
-                        Some(Event::StopSpinner) => {
+                        Some(Event::StopSpinner(acknowledged)) => {
                             if let Some(sp) = spinner.take() {
                                 sp.finish_with_message("".to_string());
                             }
-                            paused = true;
+                            pause_polling(event_receiver, acknowledged).await?;
+                            spinner = Some(spinner::Spinner::new(t!("polling-queue-item")));
                         }
                         Some(Event::ResumeSpinner) => {
                             if spinner.is_none() {
                                 spinner = Some(spinner::Spinner::new(t!("polling-queue-item")));
                             }
-                            paused = false;
                         }
                         Some(Event::CancelPolling) | None => {
                             if let Some(sp) = spinner.take() {
@@ -1053,10 +1052,10 @@ impl JenkinsClient {
         if !visited_builds.insert(normalized_build_url) {
             return Ok(());
         }
+        *self.active_build_url.lock().unwrap_or_else(|error| error.into_inner()) = Some(build_url.to_string());
 
         let api_url = format_url(&format!("{}/api/json", build_url));
         let mut spinner = Some(spinner::Spinner::new("".to_string()));
-        let mut paused = false;
         let mut last_log_offset = 0; // Initialize the offset of the last read log
         let mut recent_console_html = String::new();
         let mut status_failures = 0u32;
@@ -1075,9 +1074,6 @@ impl JenkinsClient {
         loop {
             tokio::select! {
                 _ = delay((1000.0 * 0.2) as u64) => {
-                    if paused {
-                        continue;
-                    }
                     let response = match self.get_with_refresh(&api_url).await {
                         Ok(response) => response,
                         Err(error) => {
@@ -1207,18 +1203,18 @@ impl JenkinsClient {
                 },
                 msg = event_receiver.recv() => {
                     match msg {
-                        Some(Event::StopSpinner) => {
+                        Some(Event::StopSpinner(acknowledged)) => {
                             reset_terminal_line();
                             if let Some(sp) = spinner.take() {
                                 sp.finish_with_message("".to_string());
                             }
-                            paused = true;
+                            pause_polling(event_receiver, acknowledged).await?;
+                            spinner = Some(spinner::Spinner::new("".to_string()));
                         }
                         Some(Event::ResumeSpinner) => {
                             if spinner.is_none() {
                                 spinner = Some(spinner::Spinner::new("".to_string()));
                             }
-                            paused = false;
                         }
                         Some(Event::CancelPolling) | None => {
                             reset_terminal_line();
@@ -1418,7 +1414,8 @@ impl JenkinsClient {
                 _ = &mut sleep => return Ok(()),
                 msg = event_receiver.recv() => match msg {
                     Some(Event::CancelPolling) | None => return Err(anyhow!("cancelled!")),
-                    Some(Event::StopSpinner) | Some(Event::ResumeSpinner) => continue,
+                    Some(Event::StopSpinner(acknowledged)) => pause_polling(event_receiver, acknowledged).await?,
+                    Some(Event::ResumeSpinner) => continue,
                 },
             }
         }
@@ -1459,6 +1456,28 @@ impl JenkinsClient {
 
     /// Check if there is an ongoing build and return the build status and number
     pub async fn is_building(&self) -> Result<BuildStatus, anyhow::Error> {
+        let active_build_url = self
+            .active_build_url
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .clone();
+        if let Some(build_url) = active_build_url {
+            let response = self
+                .get_with_refresh(&format_url(&format!("{build_url}/api/json")))
+                .await?;
+            let info: serde_json::Value = response.json().await?;
+            let building = info["building"]
+                .as_bool()
+                .ok_or_else(|| anyhow!("Build status incomplete"))?;
+            let id = info["number"].as_u64().and_then(|number| u32::try_from(number).ok());
+            return Ok(BuildStatus {
+                building,
+                id,
+                last_build: id,
+                last_completed: if building { None } else { id },
+                in_queue: false,
+            });
+        }
         let job_url = self.job_url.as_ref().unwrap();
         let job_api_url = format_url(&format!(
             "{}/api/json?tree=inQueue,lastBuild[number],lastCompletedBuild[number]",
@@ -1517,8 +1536,14 @@ impl JenkinsClient {
     }
     #[allow(dead_code)]
     pub async fn cancel_build(&self, build_number: Option<u32>) -> Result<(), anyhow::Error> {
-        let api_url = match &self.job_url {
-            Some(url) => match build_number {
+        let active_build_url = self
+            .active_build_url
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .clone();
+        let api_url = match (&active_build_url, &self.job_url) {
+            (Some(build_url), _) => format_url(&format!("{build_url}/stop")),
+            (None, Some(url)) => match build_number {
                 Some(number) => format_url(&format!("{}/{}/stop", url, number)),
                 _ => format_url(&format!("{}/lastBuild/stop", url)),
             },
@@ -1587,6 +1612,27 @@ fn build_matches_upstream(build: &serde_json::Value, upstream: &BuildIdentity) -
     }
 
     false
+}
+
+/// Yield terminal ownership only after the polling task has stopped writing output.
+async fn pause_polling(
+    event_receiver: &mut mpsc::Receiver<Event>,
+    acknowledged: tokio::sync::oneshot::Sender<()>,
+) -> Result<(), anyhow::Error> {
+    spinner::pause_active_spinner();
+    let _ = acknowledged.send(());
+    loop {
+        match event_receiver.recv().await {
+            Some(Event::ResumeSpinner) => {
+                spinner::resume_active_spinner();
+                return Ok(());
+            }
+            Some(Event::StopSpinner(acknowledged)) => {
+                let _ = acknowledged.send(());
+            }
+            Some(Event::CancelPolling) | None => return Err(anyhow!("cancelled!")),
+        }
+    }
 }
 
 fn trim_recent_console_html(html: &mut String) {

@@ -196,7 +196,6 @@ fn force_exit() -> ! {
 /// Global Ctrl+C handler. During selection it lets dialoguer handle the interrupt.
 /// During build/queue it asks whether to cancel and then exits.
 pub async fn handle_ctrl_c(mut ctrlc_rx: mpsc::UnboundedReceiver<()>) {
-    use crossterm::terminal;
     use tokio::signal;
 
     // Central Ctrl+C loop:
@@ -258,17 +257,21 @@ pub async fn handle_ctrl_c(mut ctrlc_rx: mpsc::UnboundedReceiver<()>) {
             None => continue,
         };
 
-        // Pause spinner output so the prompt is readable.
-        let _ = event_sender.send(Event::StopSpinner).await;
-        let _ = terminal::disable_raw_mode();
-        spinner::pause_active_spinner();
-
-        reset_terminal_line();
-        println!("Checking for running builds...");
-        flush_stdin();
-
+        // Wait for in-flight polling output and spinner cleanup before drawing the prompt.
+        let (acknowledged, paused) = tokio::sync::oneshot::channel();
+        if event_sender.send(Event::StopSpinner(acknowledged)).await.is_err() {
+            continue;
+        }
+        if !matches!(
+            tokio::time::timeout(std::time::Duration::from_secs(35), paused).await,
+            Ok(Ok(()))
+        ) {
+            let _ = event_sender.send(Event::ResumeSpinner).await;
+            continue;
+        }
         let prompt = t!("cancel-build-prompt").red().bold().to_string();
         let confirm = prompt::handle_confirm(prompt::with_prompt_kind(prompt::PromptKind::Confirm, || {
+            flush_stdin();
             dialoguer::Confirm::new().with_prompt(prompt).default(false).interact()
         }));
 
@@ -279,7 +282,6 @@ pub async fn handle_ctrl_c(mut ctrlc_rx: mpsc::UnboundedReceiver<()>) {
         if !confirm {
             let _ = event_sender.send(Event::ResumeSpinner).await;
             spinner::resume_active_spinner();
-            let _ = terminal::enable_raw_mode();
             continue;
         }
 
@@ -323,10 +325,10 @@ pub async fn spawn_ctrl_c_key_listener(sender: mpsc::UnboundedSender<()>) {
         use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
         use std::time::Duration;
 
-        let mut raw_enabled = false;
-
         // Dedicated raw-mode listener for polling/cancelling phases.
         loop {
+            let input_guard = prompt::lock_terminal_input();
+            let raw_enabled = crossterm::terminal::is_raw_mode_enabled().unwrap_or(false);
             if !CTRL_C.app_running() {
                 if raw_enabled {
                     let _ = crossterm::terminal::disable_raw_mode();
@@ -335,16 +337,12 @@ pub async fn spawn_ctrl_c_key_listener(sender: mpsc::UnboundedSender<()>) {
             }
             if matches!(CTRL_C.phase(), CtrlCPhase::Polling | CtrlCPhase::Cancelling) {
                 if prompt::is_prompting() {
-                    if raw_enabled {
-                        let _ = crossterm::terminal::disable_raw_mode();
-                        raw_enabled = false;
-                    }
+                    drop(input_guard);
                     std::thread::sleep(Duration::from_millis(100));
                     continue;
                 }
                 if !raw_enabled {
                     let _ = crossterm::terminal::enable_raw_mode();
-                    raw_enabled = true;
                     debug_ctrlc!("key listener: raw enabled");
                 }
 
@@ -367,9 +365,9 @@ pub async fn spawn_ctrl_c_key_listener(sender: mpsc::UnboundedSender<()>) {
             } else {
                 if raw_enabled {
                     let _ = crossterm::terminal::disable_raw_mode();
-                    raw_enabled = false;
                     debug_ctrlc!("key listener: raw disabled");
                 }
+                drop(input_guard);
                 std::thread::sleep(Duration::from_millis(100));
             }
         }

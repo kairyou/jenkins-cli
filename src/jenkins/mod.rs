@@ -14,10 +14,10 @@ pub mod history;
 #[doc(hidden)]
 pub mod presets;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 #[doc(hidden)]
 pub enum Event {
-    StopSpinner,
+    StopSpinner(tokio::sync::oneshot::Sender<()>),
     ResumeSpinner,
     CancelPolling,
 }
