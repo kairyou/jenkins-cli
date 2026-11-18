@@ -2,6 +2,14 @@
 use std::error::Error;
 use std::io::{self, ErrorKind, Write};
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::{Mutex, MutexGuard};
+
+// Only one reader may change terminal modes or consume keyboard events at a time.
+static TERMINAL_INPUT: Mutex<()> = Mutex::new(());
+
+pub(crate) fn lock_terminal_input() -> MutexGuard<'static, ()> {
+    TERMINAL_INPUT.lock().unwrap_or_else(|error| error.into_inner())
+}
 
 static PROMPTING: AtomicBool = AtomicBool::new(false);
 static PROMPT_KIND: AtomicU8 = AtomicU8::new(PromptKind::Other as u8);
@@ -69,10 +77,10 @@ pub fn with_prompt_kind<F, R>(kind: PromptKind, f: F) -> R
 where
     F: FnOnce() -> R,
 {
-    // Ensure prompts start at column 0 to avoid indentation drift.
-    crate::terminal::before_prompt();
-
     let _prompt_guard = PromptStateGuard::enter(kind);
+    let _input_guard = lock_terminal_input();
+    // The background listener has now released both input and terminal mode ownership.
+    crate::terminal::before_prompt();
     f()
 }
 
