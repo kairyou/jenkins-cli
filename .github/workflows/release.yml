@@ -18,6 +18,11 @@ on:
         options:
           - edgeone_release
           - prerelease
+          - resume_release
+      tag:
+        description: "Existing version tag to resume (for resume_release only)"
+        type: string
+        required: false
 
 permissions:
   contents: read
@@ -52,6 +57,7 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           INPUT_MODE: ${{ inputs.mode }}
+          INPUT_TAG: ${{ inputs.tag }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
           RELEASE_SHA: ${{ github.sha }}
           RELEASE_BRANCH: ${{ github.event.pull_request.head.ref }}
@@ -67,6 +73,27 @@ jobs:
           echo "version=" >> "$GITHUB_OUTPUT"
 
           if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
+            if [ "${INPUT_MODE}" = "resume_release" ]; then
+              if [[ ! "${INPUT_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                echo "An existing stable version tag is required." >&2
+                exit 1
+              fi
+              tagged_sha="$(git rev-parse --verify "refs/tags/${INPUT_TAG}^{commit}")"
+              git checkout --detach "${tagged_sha}"
+              version="$(cargo metadata --locked --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "jenkins") | .version')"
+              if [ "${INPUT_TAG}" != "v${version}" ]; then
+                echo "Tag ${INPUT_TAG} does not match Cargo version ${version}." >&2
+                exit 1
+              fi
+              echo "build=true" >> "$GITHUB_OUTPUT"
+              echo "formal=true" >> "$GITHUB_OUTPUT"
+              echo "release_sha=${tagged_sha}" >> "$GITHUB_OUTPUT"
+              echo "release_tag=${INPUT_TAG}" >> "$GITHUB_OUTPUT"
+              echo "version=${version}" >> "$GITHUB_OUTPUT"
+              echo "Resuming ${INPUT_TAG} from ${tagged_sha} without republishing the crate."
+              exit 0
+            fi
+
             if [ "${INPUT_MODE}" = "prerelease" ]; then
               echo "build=true" >> "$GITHUB_OUTPUT"
               echo "release_tag=prerelease" >> "$GITHUB_OUTPUT"
@@ -146,7 +173,7 @@ jobs:
       - name: Checkout release commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ needs.prepare-release.outputs.release_sha }}
           persist-credentials: false
       - name: Read Rust toolchain
         id: rust-toolchain
@@ -186,7 +213,7 @@ jobs:
       - name: Checkout release commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ needs.prepare-release.outputs.release_sha }}
           persist-credentials: false
       - name: Read Rust toolchain
         id: rust-toolchain
@@ -228,7 +255,7 @@ jobs:
       - name: Checkout release commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ needs.prepare-release.outputs.release_sha }}
           persist-credentials: false
       - name: Read Rust toolchain
         id: rust-toolchain
@@ -269,7 +296,7 @@ jobs:
       - name: Checkout release commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ needs.prepare-release.outputs.release_sha }}
           persist-credentials: false
 
       - name: Read Rust toolchain
@@ -513,7 +540,7 @@ jobs:
       - name: Checkout release commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ needs.prepare-release.outputs.release_sha }}
           persist-credentials: false
       - name: Download artifacts (workflow)
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode != 'edgeone_release' }}
