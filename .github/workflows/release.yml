@@ -7,6 +7,7 @@ on:
     paths:
       - Cargo.toml
       - Cargo.lock
+      - .github/workflows/release.yml
   workflow_dispatch:
     inputs:
       mode:
@@ -134,11 +135,11 @@ jobs:
     if: ${{ needs.prepare-release.outputs.build == 'true' }}
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         target:
           - x86_64-unknown-linux-gnu # x86_64 Linux (GNU)
           - x86_64-unknown-linux-musl # x86_64 Linux (musl)
-          - x86_64-pc-windows-gnu # Windows (MinGW)
           - aarch64-unknown-linux-gnu # ARM64 Linux (GNU)
           - aarch64-unknown-linux-musl # ARM64 Linux (musl)
     steps:
@@ -176,9 +177,11 @@ jobs:
     if: ${{ needs.prepare-release.outputs.build == 'true' }}
     runs-on: windows-latest
     strategy:
+      fail-fast: false
       matrix:
         target:
           - x86_64-pc-windows-msvc # Windows (MSVC)
+          - x86_64-pc-windows-gnu # Windows (MinGW)
     steps:
       - name: Checkout release commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -193,8 +196,17 @@ jobs:
         with:
           toolchain: ${{ steps.rust-toolchain.outputs.toolchain }}
           targets: ${{ matrix.target }}
+      - name: Configure MinGW
+        if: ${{ matrix.target == 'x86_64-pc-windows-gnu' }}
+        shell: pwsh
+        run: |
+          'C:\mingw64\bin' | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          & 'C:\mingw64\bin\gcc.exe' --version
       - name: Build
         run: cargo build --locked --release --target=${{ matrix.target }}
+      - name: Verify binary
+        shell: pwsh
+        run: '& "target/${{ matrix.target }}/release/jenkins.exe" --version'
       - name: Package
         run: tar -czf jenkins-${{ matrix.target }}.tar.gz -C target/${{ matrix.target }}/release jenkins.exe
       - name: Upload
